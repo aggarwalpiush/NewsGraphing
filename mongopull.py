@@ -44,7 +44,7 @@ stuff = db.find({},{'links':1,'sourceurl':1}).sort("_id",-1).limit(10000)
 doms = []
 print("downloaded!")
 for obj in tqdm(stuff):
-    print(obj)
+    #print(obj)
     if 'links' in obj:
         sdom = re_3986.match(obj['sourceurl']).group(4)
         for link in obj['links']:
@@ -53,7 +53,6 @@ for obj in tqdm(stuff):
                 if ddom:
                     fulldata.append([wgo.sub("",sdom), wgo.sub("",ddom), link[1]])
                     
-print(fulldata)                    
 df = pd.DataFrame(fulldata, columns=['sdom', 'ddom', 'link'])
 
 feather.write_dataframe(df, "save.feather")
