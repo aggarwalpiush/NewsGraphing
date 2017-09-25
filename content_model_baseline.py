@@ -128,30 +128,41 @@ clean_corpus = [clean(corpus[i]) for i in range(len(corpus))]
 print("should equal docs", len(clean_corpus))
 
 
-#Create TF-IDF valued matrix
-vectorizer = TfidfVectorizer()
-matrix = vectorizer.fit_transform(clean_corpus)
-
-vocabulary = [] #list(vectorizer.vocabulary_.keys())
-for i, feature in enumerate(vectorizer.get_feature_names()):
-    if not any(char.isdigit() for char in feature):
-        vocabulary.append(feature)
-
-print("vocab size", len(vocabulary)) #perhaps further filter based on TF-IDF values, stemming, etc 
-
-# Split into training and (holdout) testing sets
+# Split domains into training and (holdout) testing sets
 from sklearn.model_selection import train_test_split
 test_label = 'pol'
 article_ids = range(len(articles.keys()))
 associated_labels = [labels[i][test_label] for i in articles.keys()]
 X_train_ids, X_holdout_ids, y_train, y_holdout = train_test_split(article_ids, associated_labels, test_size=0.2, random_state=0)
 
+
+#Create TF-IDF valued matrix on training set
+vectorizer = TfidfVectorizer()
+matrix_train = vectorizer.fit_transform([clean_corpus[i] for i in X_train_ids])
+
+vocabulary = [] #list(vectorizer.vocabulary_.keys())
+for i, feature in enumerate(vectorizer.get_feature_names()):
+    vocabulary.append(feature)
+
+print("training vocab size", len(vocabulary)) #perhaps further filter based on TF-IDF values, stemming, etc 
+
+training_IDFs = vectorizer.idf_
+
+#Create TF-IDF valued matrix on holdout test set (except use IDF training values)
+vectorizer = TfidfVectorizer()
+matrix_holdout = vectorizer.fit_transform([clean_corpus[i] for i in X_holdout_ids])
+holdout_IDFs = vectorizer.idf_
+
+#need to divide by holdout IDFs and multiply by training IDFs
+
+
+
 # Grab domain feature vectors for each set to pass to classifier
 #from operator import itemgetter
 #X_train = itemgetter(*X_train_ids)(list(articles.keys()))
 #X_holdout = itemgetter(*X_holdout_ids)(list(articles.keys()))
-X_train = matrix[np.array(X_train_ids),:]
-X_holdout = matrix[np.array(X_holdout_ids),:]
+X_train = matrix_train[np.array(X_train_ids),:]
+X_holdout = matrix_holdout[np.array(X_holdout_ids),:]
 
 # Perform k-fold CV using the training set
 k = 5; #number of folds
