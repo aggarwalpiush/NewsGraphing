@@ -24,6 +24,16 @@ function loadBias()
     return bias, biasnames
 end
 
+"""
+    buildWeb(df)
+
+Build a data structure for storing the links in an indexed form.
+
+The first key is the type of link one of: ["a", "link", "script", "img", "mut"]
+where a,link,script, and img are html tag types, and mut is "mutual a links".
+
+df is a dataframe with columns sdom, ddom, type as the first three columns.
+"""
 function buildWeb(df)
     cats = Dict{String, Dict}()
     for key in ["a", "link", "script", "img", "mut"]
