@@ -52,12 +52,13 @@ for obj in tqdm(stuff):
                 ddom = re_3986.match(link[0]).group(4)
                 if ddom:
                     fulldata.append([wgo.sub("",sdom), wgo.sub("",ddom), link[1]])
-                    
+
+       
 df = pd.DataFrame(fulldata, columns=['sdom', 'ddom', 'link'])
 
-feather.write_dataframe(df, "save.feather")
+#feather.write_dataframe(df, "save.feather")
 
-print("Finished successfully!")
+test = feather.read_dataframe("save.feather")
 
 
 
