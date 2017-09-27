@@ -81,21 +81,23 @@ def get_article_text():
             if row[1] in pol:
                 p = pol.index(row[1])
                 s2l[name] = row[1]
-                if row[2] in rep:
-                    r = rep.index(row[2])
-                    if row[3] in flag:
-                        f = flag.index(row[3])
-                        s2l[name] = row[3]
-                        bias.append(row + [name, p, r, f, 1 if p == -1 else 0])
-        
-            if name not in biasnames:
+            if row[2] in rep:
+                r = rep.index(row[2])
+            if row[3] in flag:
+                f = flag.index(row[3])
+                s2l[name] = row[3]
+            bias.append(row + [name, p, r, f, 1 if p == -1 else 0])
+            
+            if (p!=-1 or r!=-1) and name not in biasnames:
                 biasnames.append(name)
+            
 
     sample = 1000000
     stuff = db.find({},{'text':1,'sourceurl':1}).sort("_id",-1)#.limit(sample)
 
     arts = {}
-    print('Number of articles', len(set(biasnames)))
+    counts = {}
+    print('Number of domains with at least one label', len(set(biasnames)))
 
     #Download articles and process them with SpaCy
     for obj in tqdm(stuff):
@@ -106,13 +108,15 @@ def get_article_text():
                 #nlp.tagger(doc)
                 #Only break into tokens and give them part of speech tags
                 #doc_sentences = [sent.string.strip() for sent in doc.sents]
-                doc = ' '.join(obj['text'][:810].split())
+                doc = ' '.join(obj['text'].split())
                 if sdom not in arts.keys():
                     arts[sdom] = []
+                    counts[sdom] = 0
                 arts[sdom].append(doc)
-
+                counts[sdom] += 1
             
-    print('Number of domains', len(arts.keys()))
+    print('Number of domains with text and at least one label', len(arts.keys()))
+    print('Total number of articles: ', sum(counts.values()))
 
     return (arts)
 

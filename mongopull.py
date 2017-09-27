@@ -40,7 +40,8 @@ re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?
 wgo = re.compile("www.")
 
 fulldata = []
-stuff = db.find({},{'links':1,'sourceurl':1}).sort("_id",-1).limit(10000)
+N = 1000000 #10000
+stuff = db.find({},{'links':1,'sourceurl':1}).sort("_id",-1).limit(N)
 doms = []
 print("downloaded!")
 for obj in tqdm(stuff):
@@ -56,9 +57,9 @@ for obj in tqdm(stuff):
        
 df = pd.DataFrame(fulldata, columns=['sdom', 'ddom', 'link'])
 
-#feather.write_dataframe(df, "save.feather")
+feather.write_dataframe(df, "save.feather")
 
-test = feather.read_dataframe("save.feather")
+#test = feather.read_dataframe("save.feather")
 
 
 
