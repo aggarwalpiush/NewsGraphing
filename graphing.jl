@@ -6,12 +6,12 @@ using Plots
 blacklist = String["twitter.com", "facebook.com", "youtube.com", "instagram.com",
                 "plus.google.com", "linkedin.com", "t.co", "itunes.apple.com",
                 "pinterest.com", "flickr.com", "bit.ly", "play.google.com"]
-    
+
 function constructGraph(body; minsamp=1, giant=false, mut=false)
     s2i = Dict{String, Int}()
     i2s = Dict{Int, String}()
     count = 0
-    
+
     for src in keys(body)
         if ~(src in blacklist)
             for dst in keys(body[src])
@@ -41,14 +41,14 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
             end
         end
     end
-    
+
     if ~giant
         return G, s2i, i2s
     else
         sg = sort(connected_components(G), by=size, rev=true)[1]
         ss2i = Dict{String, Int}()
         si2s = Dict{Int, String}()
-        
+
         c = 0
         for i in sg
             c += 1
@@ -68,7 +68,7 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
                 end
             end
         end
-        
+
         return H, ss2i, si2s
     end
 end
@@ -113,8 +113,12 @@ end
 function makeFolds(G, folds)
     srand(42)
     v2f = Dict{Int, Int}()
+    # f2r = Dict{Int, Int}()
     for v in 1:nv(G)
+      # if v2r[v] ==
         v2f[v] = rand(1:folds)
+        # f2r[v2f[v]] = v2r[v]
+        # if sum(collect(values(v2f)).==3) == 0
     end
     return v2f
 end
@@ -124,7 +128,7 @@ function makeBeliefs(bias, G, s2i, i2s, key; folds=nothing, fold=1)
     for v in 1:nv(G)
         v2r[v] = reality(bias, i2s[v], key)
     end
-    
+
     ϕ = ones((nv(G),2))./2.0
     for v in 1:nv(G)
         if folds == nothing || folds[v] != fold
@@ -145,7 +149,7 @@ function AUC(xs, ys)
     ps[:, 2] = ys
     ps = sortrows(ps, by=x->(x[1],x[2]))
     s = 0
-    
+
     for i in 1:size(ps, 1)-1
         s += (ps[i+1,1]-ps[i,1])*(ps[i,2]+ps[i+1,2])/2
     end
@@ -157,29 +161,31 @@ function getROC(bias, G, s2i, i2s, key, b; folds=nothing, fold=1)
     for v in 1:nv(G)
         v2r[v] = reality(bias, i2s[v], key)
     end
-    
+
     roc_x = []
     roc_y = []
     acc = []
     range = linspace(0, 1, 51)
     for cutoff in range
         score = zeros(Int, (2, 2))
+        count = 0
         for v in 1:nv(G)
             if folds == nothing || folds[v] == fold
-                r = v2r[v]
-                if r == 3
-                    if b[v, 1] > cutoff
-                        score[1,1] += 1
-                    else
-                        score[2,1] += 1
-                    end
-                    elseif r == 2
-                    if b[v, 1] > cutoff
-                        score[1,2] += 1
-                    else
-                        score[2,2] += 1
-                    end
+              count += 1
+              r = v2r[v]
+              if r == 3
+                if b[v, 1] > cutoff
+                  score[1,1] += 1
+                else
+                  score[2,1] += 1
                 end
+              elseif r == 2
+                if b[v, 1] > cutoff
+                  score[1,2] += 1
+                else
+                  score[2,2] += 1
+                end
+              end
             end
         end
         tp = score[1,1]/sum(score[:,1])
@@ -196,7 +202,7 @@ function findInc(bias, G, s2i, i2s, key, b; folds=nothing, fold=1)
     for v in 1:nv(G)
         v2r[v] = reality(bias, i2s[v], key)
     end
-    
+
     roc_x = []
     roc_y = []
     range = linspace(0, 0.25, 26)
@@ -228,4 +234,27 @@ function findInc(bias, G, s2i, i2s, key, b; folds=nothing, fold=1)
         append!(acc, (score[1,1]+score[3,2])/(sum(score)-sum(score[2,:])))
     end
     return acc, range
+end
+
+
+function countunion!(c::Dict{S,T}, a::Dict{S,T}) where {S,T}
+    for (k,d) in a
+        for (l,v) in d
+            #println(k,l,v)
+            if k ∉ keys(c)
+                c[k] = Dict{String, Int}()
+            end
+            if l ∉ keys(c[k])
+                c[k][l] = 0
+            end
+            c[k][l] += v
+        end
+    end
+    return c
+end
+
+function countunion(a::Dict{S,T}, b::Dict{S,T}) where {S,T}
+    c = typeof(a)()
+    return countunion!(countunion!(c, a), b)
+
 end

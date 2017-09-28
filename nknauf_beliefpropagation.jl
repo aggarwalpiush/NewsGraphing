@@ -10,23 +10,46 @@ save = loadSave()
 
 bias = loadBias()
 
-cats = buildWeb(save)
+cats = buildWeb(save) #only mutual links for "a"
+
+edgeunion = countunion(cats["a"], cats["img"])
+@time for x in ["link", "script"]
+    countunion!(edgeunion, cats[x])
+end
 
 G, s2i, i2s = constructGraph(cats["mut"], minsamp=10, giant=false)
 
-sets = [("mut", 50)]#[("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
+sets = [("a", 50)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
 
 s2p = Dict{String, Array}()
 
 roc_x = Vector{Float64}()
 roc_y = Vector{Float64}()
 
+k = 3 #number of folds
+
 for (sn, set) in enumerate(sets)
+   edgetype = set[1]
+    if edgetype == "union"
+      edgeset = edgeunion
+    else
+      edgeset = cats[set[1]]
+    end
     G, s2i, i2s = constructGraph(cats[set[1]], minsamp=set[2], giant=false)
     G2, s2i2, i2s2 = constructGraph(cats[set[1]], minsamp=set[2], giant=true)
     println(minimum([length([x for x in all_neighbors(G, v) if x != v]) for v in 1:nv(G)]))
     lx, ly = spring_layout(G)
     lx2, ly2 = spring_layout(G2)
+
+    # for site in biasnames
+    #   v2r = Dict{Int, Dict{String,Int}}()
+    #   for v in nv(G)
+    #     v2r[v] = Dict{String,Int}()
+    #     v2r[v]["bias"] = reality(bias, site, "bias")
+    #     v2r[v]["fake"] = reality(bias, site, "fake")
+    #   end
+    # end
+
     for key in ["bias", "fake"]
         p = plot()
         plot!(p, [0, 1], [0, 1], line=:dash)
@@ -49,12 +72,11 @@ for (sn, set) in enumerate(sets)
         plotGraph(bias, G2, s2i2, i2s2, lx2, ly2, color=b[:,1],
                     path=mydir*key*"prop_main.png")
 
-        folds = makeFolds(G, 3)
+        folds = makeFolds(G, k)
         aucs = []
-        for f in 1:3
+        for f in 1:k
             ϕ = makeBeliefs(bias, G, s2i, i2s, key, folds=folds, fold=f)
             pr, b, lodds = beliefprop(G, ϕ, Psis(0.44), 2);
-
             for v in 1:nv(G)
                 if folds[v] == f
                     site = i2s[v]
@@ -81,7 +103,7 @@ for (sn, set) in enumerate(sets)
         savefig(mydir*key*"_ROC_curve.png")
 
         open(mydir*"score.txt", "w") do f
-            write(f, string(sum(aucs)/3))
+            write(f, string(sum(aucs)/k))
         end
     end
 end
@@ -92,8 +114,8 @@ end
 
 # s2p
 
-s2p["cnn.com"]
-s2p["bluebirdbanter.com"]
+# s2p["cnn.com"]
+# s2p["bluebirdbanter.com"]
 
 # using JSON
 # open("metadata.json", "w") do f

@@ -45,6 +45,8 @@ from spacy.en import English
 
 def get_article_text():
     
+    flag = 1
+    
     nlp = spacy.load('en')
     #Load the Spacy English Language model
 
@@ -104,16 +106,25 @@ def get_article_text():
         if 'text' in obj:
             sdom = wgo.sub("", re_3986.match(obj['sourceurl']).group(4))
             if sdom in biasnames:
-                #doc = nlp.tokenizer(obj['text'][:100*8])
-                #nlp.tagger(doc)
-                #Only break into tokens and give them part of speech tags
-                #doc_sentences = [sent.string.strip() for sent in doc.sents]
-                doc = ' '.join(obj['text'].split())
-                if sdom not in arts.keys():
-                    arts[sdom] = []
-                    counts[sdom] = 0
-                arts[sdom].append(doc)
-                counts[sdom] += 1
+                if flag==1:
+                    print('good')
+                    #doc = nlp.tokenizer(obj['text'][:100*8])
+                    #nlp.tagger(doc)
+                    #Only break into tokens and give them part of speech tags
+                    #doc_sentences = [sent.string.strip() for sent in doc.sents]
+                    doc = ' '.join(obj['text'].split())
+                    if sdom not in arts.keys():
+                        arts[sdom] = []
+                        counts[sdom] = 0
+                    arts[sdom].append(doc)
+                    counts[sdom] += 1
+                else:
+                    doc = nlp.tokenizer(obj['text'])
+                    nlp.tagger(doc)
+                    #Only break into tokens and give them part of speech tags
+                    if sdom not in arts.keys():
+                        arts[sdom] = []
+                    arts[sdom].append(doc)
             
     print('Number of domains with text and at least one label', len(arts.keys()))
     print('Total number of articles: ', sum(counts.values()))
