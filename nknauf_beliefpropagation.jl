@@ -1,3 +1,5 @@
+
+
 using GraphPlot
 using Plots
 pyplot()
@@ -19,7 +21,7 @@ end
 
 G, s2i, i2s = constructGraph(cats["mut"], minsamp=10, giant=false)
 
-sets = [("a", 50)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
+sets = [("union", 2)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
 
 s2p = Dict{String, Array}()
 
@@ -35,8 +37,8 @@ for (sn, set) in enumerate(sets)
     else
       edgeset = cats[set[1]]
     end
-    G, s2i, i2s = constructGraph(cats[set[1]], minsamp=set[2], giant=false)
-    G2, s2i2, i2s2 = constructGraph(cats[set[1]], minsamp=set[2], giant=true)
+    G, s2i, i2s = constructGraph(edgeset, minsamp=set[2], giant=false)
+    G2, s2i2, i2s2 = constructGraph(edgeset, minsamp=set[2], giant=true)
     println(minimum([length([x for x in all_neighbors(G, v) if x != v]) for v in 1:nv(G)]))
     lx, ly = spring_layout(G)
     lx2, ly2 = spring_layout(G2)
@@ -52,7 +54,7 @@ for (sn, set) in enumerate(sets)
 
     for key in ["bias", "fake"]
         p = plot()
-        plot!(p, [0, 1], [0, 1], line=:dash)
+        plot!(p, [0, 1], [0, 1], line=:dash, label="")
         println(key*string(set))
         try mkdir("plots/"*string(set[1])) catch x end
         try mkdir("plots/"*string(set[1])*"/"*string(set[2])) catch x end
@@ -61,14 +63,14 @@ for (sn, set) in enumerate(sets)
         plotGraph(bias, G, s2i, i2s, lx, ly, color=key,
                     path=mydir*key*"train.png")
         ϕ = makeBeliefs(bias, G, s2i, i2s, key)
-        pr, b, lodds = beliefprop(G, ϕ, Psis(0.44), 10);
+        pr, b, lodds = beliefprop(G, ϕ, Psis(0.44), 1);
         plotGraph(bias, G, s2i, i2s, lx, ly, color=b[:,1],
                     path=mydir*key*"prop.png")
 
         plotGraph(bias, G2, s2i2, i2s2, lx2, ly2, color=key,
                     path=mydir*key*"train_main.png")
         ϕ = makeBeliefs(bias, G2, s2i2, i2s2, key)
-        pr, b, lodds = beliefprop(G2, ϕ, Psis(0.44), 10);
+        pr, b, lodds = beliefprop(G2, ϕ, Psis(0.44), 1);
         plotGraph(bias, G2, s2i2, i2s2, lx2, ly2, color=b[:,1],
                     path=mydir*key*"prop_main.png")
 
@@ -76,7 +78,7 @@ for (sn, set) in enumerate(sets)
         aucs = []
         for f in 1:k
             ϕ = makeBeliefs(bias, G, s2i, i2s, key, folds=folds, fold=f)
-            pr, b, lodds = beliefprop(G, ϕ, Psis(0.44), 2);
+            pr, b, lodds = beliefprop(G, ϕ, Psis(0.34), 2);
             for v in 1:nv(G)
                 if folds[v] == f
                     site = i2s[v]
@@ -97,9 +99,12 @@ for (sn, set) in enumerate(sets)
             #println(typeof(roc_y))
             #println(roc_x)
             #println(roc_y)
-            plot!(p, roc_x, roc_y)
+            plot!(p, roc_x, roc_y,label="Fold $f (AUC=$(@sprintf("%.3f", auc)))")
             push!(aucs, auc)
         end
+        avg_auc = sum(aucs)/k
+        title!("Receiver Operating Characteristic (Average AUC=$(@sprintf("%.3f", avg_auc)))")
+        println("Avg AUC : "*string(avg_auc))
         savefig(mydir*key*"_ROC_curve.png")
 
         open(mydir*"score.txt", "w") do f

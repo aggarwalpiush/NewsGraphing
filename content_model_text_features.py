@@ -32,27 +32,117 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.feature_extraction.text import TfidfTransformer
 import scipy
 
+from sklearn.feature_extraction import text
+from sklearn.linear_model import LogisticRegression
+
+import string
 from dataset import get_article_text
 
-arts = get_article_text(flag=2)
+from spacy.en import English
+from collections import Counter
+
+
+def remove_punctuation(myString):
+    translator = str.maketrans('', '', string.punctuation)
+    # Remove punctuation marks
+    return myString.translate(translator)
+
+def remove_stop_words(tokens):
+    from sklearn import feature_extraction
+    return [w for w in tokens if w not in feature_extraction.text.ENGLISH_STOP_WORDS]
+
+def stem_words(myString):
+#    stemmer = SnowballStemmer('english') #PorterStemmer()
+#    return [stemmer.stem(token) for token in tokens]
+    stemmed = []
+    nlp = spacy.load('en')
+    for token in nlp(myString):
+        if token.lemma_:
+            token = token.lemma_
+        stemmed.append(str(token))
+    return stemmed
+
+def return_top_k_keys(myDict,k):
+    # Returns keys with largest k values (i.e. counts)
+    return sorted(myDict, key=myDict.get, reverse=True)[:k]
+
+def clean(myString):
+    myTokens_no_numbers = []
+    myTokens = remove_punctuation(myString.lower()).split()
+    myTokens_no_stops = remove_stop_words(myTokens)
+    #myTokens_stemmed = stem_words(' '.join(myTokens_no_stops))
+    for token in myTokens_no_stops:
+        if not any(char.isdigit() for char in token):
+            myTokens_no_numbers.append(token)
+    
+    myString_cleaned = " ".join(myTokens_no_numbers)
+    
+    return myString_cleaned
+
+def reality(label):
+    if label in pol:
+        cat = 'pol'
+        if label in ['R','RC','C']:
+            new_label = 0
+        elif label in ['L','LC']:
+            new_label = 1
+    elif label in rep:
+        cat = 'rep'
+        if label in ['LOW','VERY LOW','MIXED']:
+            new_label = 0
+        elif label in ['HIGH','VERY HIGH']:
+            new_label = 1
+    
+    return new_label
+
+
+arts,s2l = get_article_text()
 # Read in dataset
+
+
+nlp = spacy.load('en')
+#Load the Spacy English Language model
+
+pol = ['L', 'LC', 'C', 'RC', 'R'] #Political Bias
+rep = ['VERY LOW', 'LOW', 'MIXED', 'HIGH', 'VERY HIGH'] #Reporting Quality
+flag = ['F', 'X', 'S'] #Fake categories: Fake, Conspiracy, Satire
+cats = pol
+whitelist = ["NOUN", "PROPN", "ADJ", "ADV"]
 
 vocab = set()
 bivocab = set()
 
+
+
+for sdom in arts.keys():    
+    #first clean text
+    doc = arts[sdom][0]
+    #doc = clean(doc)
+    doc = nlp.make_doc(doc)
+    nlp.tagger(doc)
+    arts[sdom] = doc
+# Create parts of speech tags
+
+print("tagging finished")
+
+
+
 #Loop through all articles and create a big list of all occuring tokens
 #We're doing tokens and bigrams
-for (sdom, doc) in tqdm(arts):
+#for (sdom, doc) in tqdm(arts):
 for sdom in tqdm(arts.keys()):
+    
+    doc = arts[sdom]
     
     mycat = s2l[sdom]
     if mycat in cats:
-        #for word in doc[:-1]:
-        for word in arts[sdom]:
+        for word in doc[:-1]:
             if not word.is_stop and word.is_alpha and word.pos_ in whitelist:
-
                 if not word.lemma_ in vocab:
-                    vocab.add(word.lemma_)
+                    if word.lemma_:
+                        vocab.add(word.lemma_)
+                    else:
+                        vocab.add(word)
                 neigh = word.nbor()
                 if not neigh.is_stop and neigh.pos_ in whitelist:
                     bigram = word.lemma_+" "+neigh.lemma_
@@ -76,7 +166,10 @@ site_raw_bs = {}
 
 sa = SIA()
 
-for (sdom, doc) in tqdm(arts):
+for sdom in tqdm(arts.keys()):
+#for (sdom, doc) in tqdm(arts):
+    
+    doc = arts[sdom]
     
     mycat = s2l[sdom]
     if mycat in cats:
@@ -89,12 +182,25 @@ for (sdom, doc) in tqdm(arts):
         for word in doc[:-1]:
             if not word.is_stop and word.is_alpha and word.pos_ in whitelist:
                 
-                site_raw_tc[sdom][v2i[word.lemma_]] += 1
-                site_raw_ts[sdom][v2i[word.lemma_]] += c
+                if word.lemma_:
+                    site_raw_tc[sdom][v2i[word.lemma_]] += 1
+                    site_raw_ts[sdom][v2i[word.lemma_]] += c
+                else:
+                    site_raw_tc[sdom][v2i[word]] += 1
+                    site_raw_ts[sdom][v2i[word]] += c
                 
                 neigh = word.nbor()
                 if not neigh.is_stop and neigh.pos_ in whitelist:
-                    bigram = word.lemma_+" "+neigh.lemma_
+                    if neigh.lemma_:
+                        if word.lemma_:
+                            bigram = word.lemma_+" "+neigh.lemma_
+                        else:
+                            bigram = word+" "+neigh.lemma_
+                    else:
+                        if word.lemma_:
+                            bigram = word.lemma_+" "+neigh
+                        else:
+                            bigram = word+" "+neigh
                     site_raw_bc[sdom][bv2i[bigram]] += 1
                     site_raw_bs[sdom][bv2i[bigram]] += c
 
@@ -153,35 +259,82 @@ site_bfdv = site_bfv - doc_bfv
 
 #Run the models and score them
 
-clf = RandomForestClassifier(random_state=42, n_estimators=200)
+#clf = RandomForestClassifier(random_state=42, n_estimators=200)
+clf = LogisticRegression()
 
 X = np.concatenate((ttfidf.toarray(),site_tszv,site_tfdv,btfidf.toarray(),site_bszv,site_bfdv), axis=1)
 print(X.shape)
-y = np.array([cats.index(s2l[site]) for site in sites])
-print(len(y))
+#y = np.array([cats.index(s2l[site]) for site in sites])
+y = np.array([reality(s2l[site]) for site in sites])
+print(Counter(y))
 
 
 cscore = cross_val_score(clf, X, y, cv=3)
-print(cscore)
-print(sum(cscore)/3)
+print('CV scores: ', cscore)
+print('avg: ', sum(cscore)/3)
 clf.fit(X, y)
-plt.plot(clf.feature_importances_)
-plt.show()
-mask = [i for i, x in enumerate(clf.feature_importances_) if x > 0.00035]
-cscore = cross_val_score(clf, X[:, mask], y, cv=3)
-print(cscore)
-print(sum(cscore)/3)
+##plt.plot(clf.feature_importances_)
+##plt.show()
+#mask = [i for i, x in enumerate(clf.feature_importances_) if x > 0.00035]
+mask = list(range(X.shape[1]))
+#cscore = cross_val_score(clf, X[:, mask], y, cv=3)
+#print('CV scores: ', cscore)
+#print('avg: ', sum(cscore)/3)
 
+from sklearn.cross_validation import train_test_split
+X_train, X_holdout, y_train, y_holdout = train_test_split(X, y, test_size=0.2, random_state=0)
 
 cms = []
-for train, test in KFold(n_splits=3).split(X):
-    clf.fit(X[train,:][:,mask],y[train])
-    cms.append(confusion_matrix(y[test], clf.predict(X[test,:][:,mask])))
+best_score = 0
+for train, test in KFold(n_splits=3).split(X_train):
+    clf.fit(X_train[train,:][:,mask],y_train[train])
+    score = accuracy_score(y_train[test], clf.predict(X_train[test,:][:,mask]))
+    print("cv score= ", score)
+    if score > best_score:
+        best_score = score
+        best_clf = clf
+        
+    cms.append(confusion_matrix(y_train[test], clf.predict(X_train[test,:][:,mask])))
 
 print(sum(cms))
-plt.imshow(sum(cms))
-plt.show()
+#plt.imshow(sum(cms))
+#plt.show()
 print(sum(sum(sum(cms))))
+
+# Write predictions to csv
+
+predictions = best_clf.predict_proba(X_holdout)[:,1]
+with open('holdout.csv', "w",encoding='utf-8') as f:
+    writer = csv.writer(f,lineterminator = '\n')
+    for i,p in enumerate(predictions):
+        writer.writerow([p,y_holdout[i]])
+
+# Read in predictions
+y_holdout = []
+predictions = []
+with open('holdout.csv', 'r',encoding='utf-8') as csvfile:
+    reader = csv.reader(csvfile)
+    for row in reader:
+        predictions.append(float(row[0]))
+        y_holdout.append(float(row[1]))
+            
+            
+# Print ROC curves + AUC score
+from sklearn import metrics
+fpr, tpr,_ = metrics.roc_curve(y_holdout,predictions)
+AUC = metrics.auc(fpr,tpr)
+print("AUC score: ", AUC)
+
+
+# Plot ROC curve
+plt.plot(fpr,tpr,color='darkorange',lw=2,label='ROC Curve (area = %0.3f)' % AUC)
+plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.title('Logistic Regression Receiver Operating Characteristic')
+plt.legend(loc="lower right")
+plt.savefig('roc.jpeg',bbox_inches='tight')
+
 
 
 

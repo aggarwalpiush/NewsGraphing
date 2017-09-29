@@ -45,7 +45,7 @@ from spacy.en import English
 
 def get_article_text():
     
-    flag = 1
+    ppp = 1
     
     nlp = spacy.load('en')
     #Load the Spacy English Language model
@@ -106,8 +106,7 @@ def get_article_text():
         if 'text' in obj:
             sdom = wgo.sub("", re_3986.match(obj['sourceurl']).group(4))
             if sdom in biasnames:
-                if flag==1:
-                    print('good')
+                if ppp==1:
                     #doc = nlp.tokenizer(obj['text'][:100*8])
                     #nlp.tagger(doc)
                     #Only break into tokens and give them part of speech tags
@@ -120,7 +119,7 @@ def get_article_text():
                     counts[sdom] += 1
                 else:
                     doc = nlp.tokenizer(obj['text'])
-                    nlp.tagger(doc)
+                    #nlp.tagger(doc)
                     #Only break into tokens and give them part of speech tags
                     if sdom not in arts.keys():
                         arts[sdom] = []
@@ -129,7 +128,7 @@ def get_article_text():
     print('Number of domains with text and at least one label', len(arts.keys()))
     print('Total number of articles: ', sum(counts.values()))
 
-    return (arts)
+    return (arts,s2l)
 
 #import pandas as pd
 #df = pd.DataFrame(arts)

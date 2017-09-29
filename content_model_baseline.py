@@ -60,7 +60,7 @@ def clean(myString):
     myTokens_no_numbers = []
     myTokens = remove_punctuation(myString.lower()).split()
     myTokens_no_stops = remove_stop_words(myTokens)
-    myTokens_stemmed = stem_words(' '.join(myTokens_no_stops))
+    #myTokens_stemmed = stem_words(' '.join(myTokens_no_stops))
     for token in myTokens_no_stops:
         if not any(char.isdigit() for char in token):
             myTokens_no_numbers.append(token)
@@ -77,7 +77,7 @@ pull_mongo_flag = True
 file_name = "gdelt_text.csv"
 if pull_mongo_flag: #  not (os.path.exists(file_name)):
     #Get articles by domain name
-    articles = get_article_text()
+    articles,s2l = get_article_text()
     documents = articles.keys()
     with open(file_name, "w",encoding='utf-8') as f:
         writer = csv.writer(f)
@@ -147,10 +147,8 @@ with open('bias.csv', 'r',encoding='utf-8') as csvfile:
                 if rep_label in rep:
                     labels[name]['rep'] = rep_label
   
-print("Finished reading labels", Counter(labels))
+print("Finished reading labels")
 
-# Clean text
-clean_corpus = [clean(corpus[i]) for i in range(len(corpus))]
 
 # Reorganize labels
 from sklearn.model_selection import train_test_split
@@ -165,15 +163,19 @@ for i,x in enumerate(articles.keys()):
     if labels[x][test_label] not in ['na','MIXED']: # if non-empty
         if labels[x][test_label] in ['HIGH','VERY HIGH']:
             associated_labels.append(0)
-        elif labels[x][test_label] in ['LOW','VERY LOW']: #center included here since R/RC is smaller category
+            article_ids.append(i)
+        elif labels[x][test_label] in ['LOW','VERY LOW']: #center included here since other is smaller category
             associated_labels.append(1)
-        article_ids.append(i)
+            article_ids.append(i)
 
 print("number of samples for testing/training: ", len(article_ids))
 print("number of L/VL: ", sum(associated_labels))
 
-
     
+# Clean text
+clean_corpus = [clean(corpus[i]) for i in range(len(corpus))]
+
+
 # Split domains into training and (holdout) testing sets
 X = article_ids
 y = associated_labels
@@ -181,6 +183,7 @@ X_train_ids, X_holdout_ids, y_train, y_holdout = train_test_split(X, y, test_siz
 
 print("training set length for CV: ", len(y_train))
 print("holdout test set length: ", len(y_holdout))
+print("holdout set label distribution: ", Counter(y_holdout))
 
 # Perform K-fold CV using training set
 best_score = 0
@@ -216,8 +219,8 @@ for fold,(train_index, test_index) in enumerate(skf.split(X_train_ids, y_train))
     
     # Fit the classifier using pipeline
 #    clf = SVC(C=1,probability=True)
-#    clf = LogisticRegression()
-    clf = RandomForestClassifier(random_state=42,oob_score=True,n_estimators=300)
+    clf = LogisticRegression()
+#    clf = RandomForestClassifier(random_state=42,oob_score=True,n_estimators=300)
     clf.fit(X_train_tfidf, y_train_fold)
     predictions = clf.predict(X_test_tfidf)
     score = accuracy_score(y_test_fold, predictions)
@@ -333,7 +336,7 @@ plt.plot(fpr,tpr,color='darkorange',lw=2,label='ROC Curve (area = %0.3f)' % AUC)
 plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
-plt.title('Random Forest Receiver Operating Characteristic')
+plt.title('Logisitc Regression Receiver Operating Characteristic')
 plt.legend(loc="lower right")
 plt.savefig('roc.jpeg',bbox_inches='tight')
 
