@@ -296,7 +296,8 @@ for train, test in KFold(n_splits=3).split(X_train):
         
     cms.append(confusion_matrix(y_train[test], clf.predict(X_train[test,:][:,mask])))
 
-print(sum(cms))
+    print(cms)
+
 #plt.imshow(sum(cms))
 #plt.show()
 print(sum(sum(sum(cms))))

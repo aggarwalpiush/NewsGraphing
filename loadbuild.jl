@@ -3,7 +3,7 @@ using DataFrames
 using ProgressMeter
 
 function loadSave()
-    return Feather.read("save.feather")
+    return Feather.read("save2.feather") #Feather.read("save.feather")
 end
 
 function loadBias()
@@ -42,10 +42,10 @@ function buildWeb(df)
 
     p = Progress(size(df, 1), 0.1)
     for i in 1:size(df, 1)
-        sdom = get(df[i, 1])
-        ddom = get(df[i, 2])
+        sdom = get(df[i, 4]) # rsrc
+        ddom = get(df[i, 5]) # rdest #get(df[i, 2])
         if isascii(sdom) && isascii(ddom)
-            cat = cats[get(df[i, 3])]
+            cat = cats[get(df[i, 3])] # linktype
             if ~haskey(cat, sdom)
                 cat[sdom] = Dict{String, Int}()
             end
@@ -72,4 +72,3 @@ function buildWeb(df)
     end
     return cats
 end
-

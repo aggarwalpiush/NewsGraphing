@@ -25,7 +25,8 @@ import csv
 
 # client = MongoClient('mongodb://gdelt:meidnocEf1@gdeltmongo1:27017/')
 # client = MongoClient('mongodb://gdelt:meidnocEf1@10.51.4.172:18753/')
-client = MongoClient('mongodb://gdelt:meidnocEf1@11.7.124.26:27017/')
+#client = MongoClient('mongodb://gdelt:meidnocEf1@11.7.124.26:27017/')
+client = MongoClient('mongodb://gdelt:meidnocEf1@10.51.4.177:20884/')
 print(client.admin.command('ismaster'))
 db = client.gdelt.metadata
 
@@ -40,12 +41,11 @@ re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?
 wgo = re.compile("www.")
 
 fulldata = []
-N = 1000000 #10000
-stuff = db.find({},{'links':1,'sourceurl':1}).sort("_id",-1).limit(N)
-doms = []
+N = 1000000
+stuff = db.find({},{'links':1,'sourceurl':1}).sort("_id",-1)#.limit(N)
+#stuff = db.find().sort("_id",-1).limit(N)
 print("downloaded!")
 for obj in tqdm(stuff):
-    #print(obj)
     if 'links' in obj:
         sdom = re_3986.match(obj['sourceurl']).group(4)
         for link in obj['links']:
@@ -55,9 +55,10 @@ for obj in tqdm(stuff):
                     fulldata.append([wgo.sub("",sdom), wgo.sub("",ddom), link[1]])
 
        
+#df = pd.DataFrame(fulldata, columns=['sdom article ID','sdom', 'ddom', 'link'])
 df = pd.DataFrame(fulldata, columns=['sdom', 'ddom', 'link'])
 
-feather.write_dataframe(df, "save.feather")
+feather.write_dataframe(df, "save2.feather")
 
 #test = feather.read_dataframe("save.feather")
 

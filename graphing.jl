@@ -13,9 +13,9 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
     count = 0
 
     for src in keys(body)
-        if ~(src in blacklist)
+        if ~any(x->contains(src,x),blacklist) #~(src in blacklist)
             for dst in keys(body[src])
-                if body[src][dst] > minsamp && ~(dst in blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                if body[src][dst] > minsamp && ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
                     if ~haskey(s2i, src)
                         count += 1
                         s2i[src] = count
@@ -33,9 +33,9 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
 
     G = Graph(count)
     for src in keys(body)
-        if ~(src in blacklist)
+        if ~any(x->contains(src,x),blacklist) #~(src in blacklist)
             for dst in keys(body[src])
-                if body[src][dst] > minsamp &&  ~(dst in blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                if body[src][dst] > minsamp &&  ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
                     add_edge!(G, s2i[src], s2i[dst])
                 end
             end
@@ -62,7 +62,7 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
             src = si2s[j]
             if src in keys(body)
                 for dst in keys(body[src])
-                    if body[src][dst] > minsamp && ~(dst in blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                    if body[src][dst] > minsamp && ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
                         add_edge!(H, j, ss2i[dst])
                     end
                 end
@@ -73,23 +73,33 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
     end
 end
 
-function reality(bias, x, key)
+function reality(bias, dom, key)
     biasnames = bias[2]
     bias = bias[1]
-    if x in biasnames
-        v = bias[find(biasnames .== x)[1], 4]
+    if any(x->contains(dom,x),biasnames) #x in biasnames
+        #v = bias[find(biasnames .== x)[1], 4]
+        idx = findin([contains(dom,x) for x in biasnames],true)[1]
+        #v = bias[find(biasnames .== x)[1], 3] #cred label
         if key == "fake"
+            v = bias[idx,3] #cred label
             if isna(v)
-                return 2
+                if ~isna(bias[idx, 4]) #flag
+                  return 2 #add to LOW/VERY LOW cred labels
+                end
             else
-                return 3
+                if v in ["HIGH", "VERY HIGH"]
+                  return 3
+                elseif v in ["LOW","VERY LOW"]
+                  return 2
+                end
             end
         elseif key == "bias"
-            if isna(bias[find(biasnames .== x)[1], 2])
+            v = bias[idx, 2] #bias label
+            if isna(v)
                 return 1
-            elseif (bias[find(biasnames .== x)[1], 2] in ["L", "LC"])
+            elseif (v in ["L", "LC"])
                 return 2
-            elseif (bias[find(biasnames .== x)[1], 2] in ["R", "RC"])
+            elseif (v in ["R", "RC"])
                 return 3
             end
         end
@@ -128,6 +138,7 @@ function makeBeliefs(bias, G, s2i, i2s, key; folds=nothing, fold=1)
     for v in 1:nv(G)
         v2r[v] = reality(bias, i2s[v], key)
     end
+#countmap(collect(values(v2r)))
 
     ϕ = ones((nv(G),2))./2.0
     for v in 1:nv(G)
@@ -164,8 +175,10 @@ function getROC(bias, G, s2i, i2s, key, b; folds=nothing, fold=1)
 
     roc_x = []
     roc_y = []
-    acc = []
+    acc = Dict{Float64, Float64}()
+    cms = Dict{Float64, Array{Int,2}}()
     range = linspace(0, 1, 51)
+
     for cutoff in range
         score = zeros(Int, (2, 2))
         count = 0
@@ -188,13 +201,14 @@ function getROC(bias, G, s2i, i2s, key, b; folds=nothing, fold=1)
               end
             end
         end
+        cms[cutoff] = score
         tp = score[1,1]/sum(score[:,1])
         fp = score[1,2]/sum(score[:,2])
         append!(roc_x, fp)
         append!(roc_y, tp)
-        append!(acc, (score[1,1]+score[2,2])/sum(score))
+        acc[cutoff] = (score[1,1]+score[2,2])/sum(score)
     end
-    return roc_x, roc_y, acc, range
+    return roc_x, roc_y, acc, range, cms
 end
 
 function findInc(bias, G, s2i, i2s, key, b; folds=nothing, fold=1)

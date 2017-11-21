@@ -132,7 +132,7 @@ function beliefprop(g::Graph, ϕ, ψ, maxiter)
             push!(iterstates, state)
             push!(diffs, diff)
             #msg.storage = max(msg.storage, 1e-60)
-           return msg 
+           return msg
         end, m), maxiter)
     b = similar(pr.ϕ)
 #     for i in 1:n

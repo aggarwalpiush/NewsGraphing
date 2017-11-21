@@ -15,7 +15,7 @@ import math
 import re
 import pickle
 from tqdm import tqdm_notebook as tqdm
-import spacy
+#import spacy
 from numpy import dot
 from numpy.linalg import norm
 import csv
@@ -34,7 +34,7 @@ import itertools
 #import scipy
 
 from ipywidgets import IntProgress
-from spacy.en import English
+#from spacy.en import English
 
 
 #import sys  
@@ -45,9 +45,7 @@ from spacy.en import English
 
 def get_article_text():
     
-    ppp = 1
-    
-    nlp = spacy.load('en')
+#    nlp = spacy.load('en')
     #Load the Spacy English Language model
 
 
@@ -101,34 +99,34 @@ def get_article_text():
     counts = {}
     print('Number of domains with at least one label', len(set(biasnames)))
 
+    i2s = {}
+    article_id_count = 0
+    corpus = []
     #Download articles and process them with SpaCy
     for obj in tqdm(stuff):
         if 'text' in obj:
             sdom = wgo.sub("", re_3986.match(obj['sourceurl']).group(4))
             if sdom in biasnames:
-                if ppp==1:
-                    #doc = nlp.tokenizer(obj['text'][:100*8])
-                    #nlp.tagger(doc)
-                    #Only break into tokens and give them part of speech tags
-                    #doc_sentences = [sent.string.strip() for sent in doc.sents]
-                    doc = ' '.join(obj['text'].split())
-                    if sdom not in arts.keys():
-                        arts[sdom] = []
-                        counts[sdom] = 0
-                    arts[sdom].append(doc)
-                    counts[sdom] += 1
-                else:
-                    doc = nlp.tokenizer(obj['text'])
-                    #nlp.tagger(doc)
-                    #Only break into tokens and give them part of speech tags
-                    if sdom not in arts.keys():
-                        arts[sdom] = []
-                    arts[sdom].append(doc)
+                #doc = nlp.tokenizer(obj['text'][:100*8])
+                #nlp.tagger(doc)
+                #Only break into tokens and give them part of speech tags
+                #doc_sentences = [sent.string.strip() for sent in doc.sents]
+                doc = ' '.join(obj['text'].split())
+                if sdom not in arts.keys():
+                    arts[sdom] = []
+                    counts[sdom] = 0
+                # Create article ID to sdom map
+                i2s[article_id_count] = sdom
+                article_id_count += 1
+                # Create corpus (each article is a document)
+                corpus.append(doc)
+                arts[sdom].append(doc)
+                counts[sdom] += 1
             
     print('Number of domains with text and at least one label', len(arts.keys()))
     print('Total number of articles: ', sum(counts.values()))
 
-    return (arts,s2l)
+    return (arts,corpus,s2l,i2s)
 
 #import pandas as pd
 #df = pd.DataFrame(arts)

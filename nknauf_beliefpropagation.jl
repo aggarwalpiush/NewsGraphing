@@ -10,6 +10,10 @@ include("Psis.jl")
 
 save = loadSave()
 
+# size(unique(save[:sdom]))
+
+println(size(unique(vcat(save[:rsrc],save[:rdest]))))
+
 bias = loadBias()
 
 cats = buildWeb(save) #only mutual links for "a"
@@ -19,9 +23,7 @@ edgeunion = countunion(cats["a"], cats["img"])
     countunion!(edgeunion, cats[x])
 end
 
-G, s2i, i2s = constructGraph(cats["mut"], minsamp=10, giant=false)
-
-sets = [("union", 2)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
+sets = [("union", 1)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
 
 s2p = Dict{String, Array}()
 
@@ -38,10 +40,10 @@ for (sn, set) in enumerate(sets)
       edgeset = cats[set[1]]
     end
     G, s2i, i2s = constructGraph(edgeset, minsamp=set[2], giant=false)
-    G2, s2i2, i2s2 = constructGraph(edgeset, minsamp=set[2], giant=true)
+    #G2, s2i2, i2s2 = constructGraph(edgeset, minsamp=set[2], giant=true)
     println(minimum([length([x for x in all_neighbors(G, v) if x != v]) for v in 1:nv(G)]))
     lx, ly = spring_layout(G)
-    lx2, ly2 = spring_layout(G2)
+    #lx2, ly2 = spring_layout(G2)
 
     # for site in biasnames
     #   v2r = Dict{Int, Dict{String,Int}}()
@@ -67,16 +69,17 @@ for (sn, set) in enumerate(sets)
         plotGraph(bias, G, s2i, i2s, lx, ly, color=b[:,1],
                     path=mydir*key*"prop.png")
 
-        plotGraph(bias, G2, s2i2, i2s2, lx2, ly2, color=key,
-                    path=mydir*key*"train_main.png")
-        ϕ = makeBeliefs(bias, G2, s2i2, i2s2, key)
-        pr, b, lodds = beliefprop(G2, ϕ, Psis(0.44), 1);
-        plotGraph(bias, G2, s2i2, i2s2, lx2, ly2, color=b[:,1],
-                    path=mydir*key*"prop_main.png")
+        # plotGraph(bias, G2, s2i2, i2s2, lx2, ly2, color=key,
+        #             path=mydir*key*"train_main.png")
+        # ϕ = makeBeliefs(bias, G2, s2i2, i2s2, key)
+        # pr, b, lodds = beliefprop(G2, ϕ, Psis(0.44), 1);
+        # plotGraph(bias, G2, s2i2, i2s2, lx2, ly2, color=b[:,1],
+        #             path=mydir*key*"prop_main.png")
 
         folds = makeFolds(G, k)
         aucs = []
         for f in 1:k
+          println("Fold " *string(f))
             ϕ = makeBeliefs(bias, G, s2i, i2s, key, folds=folds, fold=f)
             pr, b, lodds = beliefprop(G, ϕ, Psis(0.34), 2);
             for v in 1:nv(G)
@@ -91,10 +94,18 @@ for (sn, set) in enumerate(sets)
                 end
             end
 
-            roc_x, roc_y, acc, lvls = getROC(bias, G, s2i, i2s, key, b, folds=folds, fold=f)
+            roc_x, roc_y, acc, lvls, cms = getROC(bias, G, s2i, i2s, key, b, folds=folds, fold=f)
             auc = AUC(roc_x, roc_y)
             #println("Max "*string(maximum(acc))*" at "*string(lvls[find(x->x==maximum(acc), acc)[1]]))
             println("AUC : "*string(auc))
+            best_cutoff = collect(keys(acc))[indmax(collect(values(acc)))]
+            println("best cutoff threshold : "*string(best_cutoff))
+            println("confusion matrix (best threshold) : ")
+            show(cms[best_cutoff])
+            println("")
+            println("confusion matrix (0.5 threshold) : ")
+            show(cms[0.5])
+            println("")
             #println(typeof(roc_x))
             #println(typeof(roc_y))
             #println(roc_x)
