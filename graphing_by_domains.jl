@@ -13,9 +13,9 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
     count = 0
 
     for src in keys(body)
-        if ~any(x->contains(src,x),blacklist) #~(src in blacklist)
+        if ~(src in blacklist) #~any(x->contains(src,x),blacklist) #~(src in blacklist)
             for dst in keys(body[src])
-                if body[src][dst] > minsamp && ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                if body[src][dst] > minsamp && ~(dst in blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
                     if ~haskey(s2i, src)
                         count += 1
                         s2i[src] = count
@@ -33,9 +33,9 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
 
     G = Graph(count)
     for src in keys(body)
-        if ~any(x->contains(src,x),blacklist) #~(src in blacklist)
+        if ~(src in blacklist) #~any(x->contains(src,x),blacklist) #~(src in blacklist)
             for dst in keys(body[src])
-                if body[src][dst] > minsamp &&  ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                if body[src][dst] > minsamp &&  ~(dst in blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
                     add_edge!(G, s2i[src], s2i[dst])
                 end
             end
@@ -62,7 +62,7 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
             src = si2s[j]
             if src in keys(body)
                 for dst in keys(body[src])
-                    if body[src][dst] > minsamp && ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                    if body[src][dst] > minsamp && ~(dst in blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
                         add_edge!(H, j, ss2i[dst])
                     end
                 end
@@ -76,10 +76,8 @@ end
 function reality(bias, dom, key)
     biasnames = bias[2]
     bias = bias[1]
-    if any(x->contains(dom,x),biasnames) #x in biasnames
-        #v = bias[find(biasnames .== x)[1], 4]
-        idx = findin([contains(dom,x) for x in biasnames],true)[1]
-        #v = bias[find(biasnames .== x)[1], 3] #cred label
+    if x in biasnames #any(x->contains(dom,x),biasnames) #x in biasnames
+        idx = find(biasnames .== x)[1] #idx = findin([contains(dom,x) for x in biasnames],true)[1]
         if key == "fake"
             v = bias[idx,3] #cred label
             if isna(v)
@@ -120,7 +118,7 @@ function plotGraph(bias, G, s2i, i2s, lx, ly; color="bias", path="plot/plot.png"
     draw(PNG(path, 60cm, 60cm), plo)
 end
 
-function makeFolds(G, folds)
+function makeFolds(G, folds, i2s, domainmap)
     srand(42)
     v2f = Dict{Int, Int}()
     for v in 1:nv(G)
