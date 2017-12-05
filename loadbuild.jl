@@ -55,7 +55,6 @@ function buildWeb(df)
             else
                 cat[sdom][ddom] += 1
             end
-            v2dom[sdom] =
         end
         next!(p)
     end
