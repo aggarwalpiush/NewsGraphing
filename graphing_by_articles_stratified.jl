@@ -120,11 +120,31 @@ function plotGraph(bias, G, s2i, i2s, lx, ly; color="bias", path="plot/plot.png"
     draw(PNG(path, 60cm, 60cm), plo)
 end
 
-function makeFolds(G, folds)
+function makeFolds(G, folds, i2s, domainmap)
     srand(42)
     v2f = Dict{Int, Int}()
+    f2domList = Dict{Int,Vector{String}}()
+    for f in 1:folds
+        f2domList[f] = String[]
+    end
+    
     for v in 1:nv(G)
-        v2f[v] = rand(1:folds)
+        fold = rand(1:folds)
+        dom = domainmap[i2s[v]]
+        
+        for f in 1:folds
+            if (dom in f2domList[f])
+                push!(f2domList[f],dom)
+                fold = f
+                break
+            else
+                if f == folds
+                    push!(f2domList[fold],dom)
+                end 
+            end
+        end
+        
+        v2f[v] = fold
     end
     return v2f
 end

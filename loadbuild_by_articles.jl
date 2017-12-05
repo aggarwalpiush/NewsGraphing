@@ -3,7 +3,7 @@ using DataFrames
 using ProgressMeter
 
 function loadSave()
-    return Feather.read("save2.feather") #save (domain) or save2 (article)
+    return Feather.read("save2.feather") #Feather.read("save.feather")
 end
 
 function loadBias()
@@ -44,7 +44,6 @@ function buildWeb(df)
     for i in 1:size(df, 1)
         sdom = get(df[i, 4]) # rsrc
         ddom = get(df[i, 5]) # rdest #get(df[i, 2])
-        domain = get(df[i,:dest]) # domain
         if isascii(sdom) && isascii(ddom)
             cat = cats[get(df[i, 3])] # linktype
             if ~haskey(cat, sdom)
@@ -55,7 +54,6 @@ function buildWeb(df)
             else
                 cat[sdom][ddom] += 1
             end
-            v2dom[sdom] =
         end
         next!(p)
     end

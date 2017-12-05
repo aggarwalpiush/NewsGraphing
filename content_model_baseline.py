@@ -42,6 +42,30 @@ from nltk import tokenize, word_tokenize
 #import spacy
 #import en_core_web_sm
 from gensim.models.doc2vec import Doc2Vec
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
+
+def get_sentiment(w,sdom,contextString,labelDict):
+    
+    sa = SIA()
+
+    bias_label = labelDict[sdom]['pol']
+    cred_label = labelDict[sdom]['rep']
+    sentiment = {'sdom':sdom,'bias':bias_label,'cred':cred_label,'score':sa.polarity_scores(contextString)['compound']}
+        
+#    score = [sentiment[i]["score"] for i in range(len(sentiment)) if sentiment[i]["bias"] in ["RC","R"] and sentiment[i]["cred"] in ["HIGH","VERY HIGH"]]
+#    if score:
+#        conservative_avg_score = np.mean(score)
+#    else:
+#        conservative_avg_score = 0
+#        
+#    score = [sentiment[i]["score"] for i in range(len(sentiment)) if sentiment[i]["bias"] in ["LC","L"] and sentiment[i]["cred"] in ["HIGH","VERY HIGH"]]
+#    if score:
+#        liberal_avg_score = np.mean(score)
+#    else:
+#        liberal_avg_score = 0
+        
+        
+    return sentiment #liberal_avg_score, conservative_avg_score, sentiment
 
 
 def text_to_vector(model, text):
@@ -246,15 +270,17 @@ def create_context(contextWord,myCorpus,window,i2s):
     
     all_context = []
     for i,text in enumerate(myCorpus):
-        context = []
+        context = {}
         if contextWord in text:
             # grab source its from
-            context.append(i2s[i])
+            context['sdom'] = i2s[i]
+            context['article_ID'] = i
 #            sents = tokenize.sent_tokenize(text)
             tokens = text.split()
 #            indices = [i for i,x in enumerate(tokens) if x == contextWord]
             indices = [i for i, x in enumerate(tokens) if i<len(tokens)-1 and contextWord in tokens[i]+' '+tokens[i+1]]
 #            context += [sent for sent in sents if contextWord in sent.lower().split()]
+            context['sentences'] = []
             for i,index in enumerate(indices):
                 if (index-window)>=0:
                     start = index-window
@@ -262,10 +288,10 @@ def create_context(contextWord,myCorpus,window,i2s):
                     start = 0
                 if (index+window)>len(tokens):
                     stop = len(tokens)
-                    context.append(tokens[start:stop])
+                    context['sentences'].append(tokens[start:stop])
                 else:
                     stop = index+window
-                    context.append(tokens[start:stop+1])
+                    context['sentences'].append(tokens[start:stop+1])
         
             all_context.append(context)
     
@@ -415,7 +441,7 @@ print("Finished reading labels")
 
 
 # Reorganize labels and choose classification problem
-l = 1 # 0 = bias and 1 = credibility
+l = 0 # 0 = bias and 1 = credibility
 label_type = ['pol','rep']
 test_label_type = label_type[l]
 test_labels = [[['L','LC'],['R','RC'],['na','C']],[['LOW','VERY LOW'],['HIGH', 'VERY HIGH'],['na','MIXED']]]
@@ -457,30 +483,31 @@ from sklearn.model_selection import GroupKFold
 X = article_ids
 y = associated_labels
 groups = associated_domains
-group_kfold = GroupKFold(n_splits=2)
+group_kfold = GroupKFold(n_splits=5)
 
-# split into training set and holdout set with non-overlapping groups
+# split into training set (80%) and holdout set (20%) with non-overlapping groups
 for train_ids,holdout_ids in group_kfold.split(X,y,groups):
     print(len(train_ids),len(holdout_ids))
 
-# then randomly give 40% more to the training set
-# resulting in 80/20 split for training and holdout test sets
-# first group by label
-holdout_ids_0 = [i for i in holdout_ids if y[i]==0]
-holdout_ids_1 = [i for i in holdout_ids if y[i]==1]
-# randomly sample equal number from each group to take from holdout set and add to training set
-N = round(.4*len(holdout_ids))
-n = round(N/2)
-if test_label_type == 'pol': #bias
-    ids = list(np.random.choice(holdout_ids_0,n,replace=False)) + list(np.random.choice(holdout_ids_1,n,replace=False)) #bias
-else:
-    ids = holdout_ids_0 + list(np.random.choice(holdout_ids_1,abs(N-len(holdout_ids_0)),replace=False)) #cred
-new_train_ids = [i for i in holdout_ids if i not in ids]
-train_ids = list(train_ids) + new_train_ids 
-holdout_ids = ids
+## then randomly give 40% more to the training set
+## resulting in 80/20 split for training and holdout test sets
+## first group by label
+#holdout_ids_0 = [i for i in holdout_ids if y[i]==0]
+#holdout_ids_1 = [i for i in holdout_ids if y[i]==1]
+## randomly sample equal number from each group to take from holdout set and add to training set
+#N = round(.4*len(holdout_ids))
+#n = round(N/2)
+#if test_label_type == 'pol': #bias
+#    ids = list(np.random.choice(holdout_ids_0,n,replace=False)) + list(np.random.choice(holdout_ids_1,n,replace=False)) #bias
+#else:
+#    ids = holdout_ids_0 + list(np.random.choice(holdout_ids_1,abs(N-len(holdout_ids_0)),replace=False)) #cred
+#new_train_ids = [i for i in holdout_ids if i not in ids]
+#train_ids = list(train_ids) + new_train_ids 
+#holdout_ids = ids
 
 X_train_ids = [X[i] for i in train_ids]    
 y_train = [y[i] for i in train_ids] 
+groups_train = [groups[i] for i in train_ids]
 X_holdout_ids = [X[i] for i in holdout_ids] 
 y_holdout = [y[i] for i in holdout_ids] 
 #X_train_ids, X_holdout_ids, y_train, y_holdout = train_test_split(X, y, test_size=0.2, stratify=y_sdom_group_ids, random_state=0)
@@ -491,7 +518,7 @@ print("holdout set label distribution: ", Counter(y_holdout))
 print("training set label distribution: ", Counter(y_train))
 
 # Write training and holdout test sets
-with open('training_set.csv', "w",encoding='utf-8',newline='') as f:
+with open('training_set_bias.csv', "w",encoding='utf-8',newline='') as f:
         writer = csv.writer(f)
         # Write header
         writer.writerow(["article_id","sdom","bias_label_0_liberal_1_conservative"])
@@ -501,7 +528,7 @@ with open('training_set.csv', "w",encoding='utf-8',newline='') as f:
             # Write rows
             writer.writerow([article_ids[idx],associated_domains[idx],associated_labels[idx]])
             
-with open('holdout_set.csv', "w",encoding='utf-8',newline='') as f:
+with open('holdout_set_bias.csv', "w",encoding='utf-8',newline='') as f:
         writer = csv.writer(f)
         # Write header
         writer.writerow(["article_id","sdom","bias_label_0_liberal_1_conservative"])
@@ -524,12 +551,13 @@ with open('holdout_set.csv', "w",encoding='utf-8',newline='') as f:
 best_score = 0
 k = 3
 skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=0)
+#skf = GroupKFold(n_splits=k)
 
 # Create Oversampler and Undersampler objects
 undersampler = RandomUnderSampler(random_state=42)
 oversampler = RandomOverSampler(random_state=42)
     
-for fold,(train_index, test_index) in enumerate(skf.split(X_train_ids, y_train)):
+for fold,(train_index, test_index) in enumerate(skf.split(X_train_ids, y_train, groups_train)):
     
     print("Fold: ", fold)
     
@@ -562,7 +590,7 @@ for fold,(train_index, test_index) in enumerate(skf.split(X_train_ids, y_train))
     for i in range(training_set_length):
         sample_weights.append(sample_weights_per_class[y_train_fold[i]])
             
-#    sample_weights = None
+    #sample_weights = None
         
 
     # Create TF-IDF features
@@ -582,7 +610,7 @@ for fold,(train_index, test_index) in enumerate(skf.split(X_train_ids, y_train))
     
     # Fit the classifier using pipeline
 #    clf = SVC(C=1,probability=True)
-    clf = LogisticRegression()
+    clf = LogisticRegression(penalty='l2',C=50)
 #    clf = RandomForestClassifier(random_state=42,oob_score=True,n_estimators=10)
     print("fitting classifier...")
     clf.fit(X_train_tfidf, y_train_fold, sample_weight=sample_weights)
@@ -640,7 +668,8 @@ if test_label_type == 'rep':
     X_resampled,y_resampled = undersampler.fit_sample(X_holdout_ids,y_holdout)
 else:
     X_resampled = X_holdout_ids
-y_resampled = y_holdout
+    y_resampled = y_holdout
+
 X_holdout = [clean_corpus[i] for i in X_resampled.reshape(1, -1)[0]]
 X_holdout_tfidf = best_tfidf.transform(X_holdout)
 
@@ -655,44 +684,65 @@ print (confusion_matrix(y_resampled, predictions))
 
 predictions = best_clf.predict_proba(X_holdout_tfidf)[:,1]
 
+
 # Get most informative features
 coeffs = list(best_clf.coef_[0])
 n = 50
 best_feats_1 = sorted(range(len(coeffs)), key=lambda x: coeffs[x], reverse=True)[:n] # descending order
 best_feats_0 = sorted(range(len(coeffs)), key=lambda x: coeffs[x])[:n] # ascending order
 
-top_n_words_0 = [(best_tfidf.get_feature_names()[i],coeffs[i]) for i in best_feats_0] #for class B where B < A
-top_n_words_1 = [(best_tfidf.get_feature_names()[i],coeffs[i]) for i in best_feats_1] #for class A where A > B
+feature_names = best_tfidf.get_feature_names()
+top_n_words_0 = [(feature_names[i],coeffs[i]) for i in best_feats_0] #for class B where B < A
+top_n_words_1 = [(feature_names[i],coeffs[i]) for i in best_feats_1] #for class A where A > B
+
+path = 'C:/Users/nfitch3-gtri/Documents/Projects/MANIC/NewsGraphing/content_baseline/context/'
 
 print("Vocabulary Length : ", len(best_tfidf.vocabulary_))
 print("Most informative label 0 words : ")
-with open('liberal_words.csv','w',encoding='utf-8') as f:
+with open(path+'liberal_words.csv','w',encoding='utf-8') as f:
     writer = csv.writer(f,lineterminator = '\n')
-#    writer.writerow(['word','coefficient value'])
+    writer.writerow(['word','coefficient value'])
     for i in range(len(top_n_words_0)):
         print(top_n_words_0[i]) 
-#        writer.writerow(top_n_words_0[i])
+        writer.writerow(top_n_words_0[i])
 print("Most informative label 1 words : ")
-with open('conservative_words.csv','w',encoding='utf-8') as f:
+with open(path+'conservative_words.csv','w',encoding='utf-8') as f:
     writer = csv.writer(f,lineterminator = '\n')
-#    writer.writerow(['word','coefficient value'])
+    writer.writerow(['word','coefficient value'])
     for i in range(len(top_n_words_1)):
         print(top_n_words_1[i]) 
-#        writer.writerow(top_n_words_1[i])
+        writer.writerow(top_n_words_1[i])
 
     
 # Get context
-path = 'C:/Users/nfitch3-gtri/Documents/Projects/MANIC/NewsGraphing/content_baseline/context/'
 word2context ={}
-top_words = [w[0] for w in top_n_words_0] + [w[0] for w in top_n_words_1]
+word2sentiment = {}
+sent_scores = []
+dom2sentiment = {}
+avg_sent_score_per_article = {}
+#top_words = [w[0] for w in top_n_words_0] + [w[0] for w in top_n_words_1]
+top_words = ['obamacare']#,'antifa','president trump','sputnik','crore','rs']
 for w in top_words:
     word2context[w] = create_context(w,clean_corpus,20,i2s)
-    with open(path+w+'_context.csv','w',encoding='utf-8') as f:
-        writer = csv.writer(f,lineterminator = '\n')
-        writer.writerow(['bias','cred','source','context'])
-        for line in word2context[w]:
-            if len(line)>1:
-                writer.writerow([labels[line[0]]['pol'],labels[line[0]]['rep'],line[0],line[1]])
+    for line in word2context[w]:
+        if line['sentences']:
+            sdom = line['sdom']
+            # for each context sentence in article "line"
+            for sentence in line['sentences']:
+                context_sentence = ' '.join(sentence) # create string
+                sentiment = get_sentiment(w,sdom,context_sentence,labels)
+                sent_scores.append(sentiment['score']) #collect sentiments for each sentence containing word in article: "line"
+                
+    avg_sent_score_per_article[w] = np.mean(sent_scores)
+#            if sdom in dom2sentiment.keys():
+#                dom2sentiment[sdom]['liberal'] = dom2sentiment[sdom]['liberal'] + avg_lib
+#                dom2sentiment[sdom]['conservative'] = dom2sentiment[sdom]['conservative'] + avg_conserv
+#            else:
+#                dom2sentiment[sdom] = {'liberal':avg_lib,'conservative':avg_conserv}
+    
+    #word2sentiment[w] = {'liberal':avg_lib,'conservative':avg_conserv} # average sentiment per word for across all articles in corpus
+
+
 
 # Generate topics
 #from gensim import corpora, models
@@ -738,36 +788,59 @@ with open('results.csv', "w",encoding='utf-8') as f:
 ## Test the classifier on the holdout set
 #print('Test Score:', clf.score(X_holdout,y_holdout))
 
-
+data = []
+AUC = []
 # Read in predictions
 y_holdout = []
 predictions = []
 coeffs = []
-with open('results.csv', 'r',encoding='utf-8') as csvfile:
-    reader = csv.reader(csvfile)
-    for row in reader:
-        predictions.append(float(row[0]))
-        y_holdout.append(float(row[1]))
-#        coeffs.append(float(row[2]))
+files = ['logreg_bias_results.csv','logreg_bias_paragraph_vectors_results.csv','randforest_bias_results.csv']
+roc_labels = ['Log Reg (TF-IDF) (area = %0.3f)','Log Reg (Paragraph Vectors) (area = %0.3f)','Random Forest (TF-IDF) (area = %0.3f)']
+for f in files:
+    with open(f, 'r',encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        for row in reader:
+            predictions.append(float(row[0]))
+            y_holdout.append(float(row[1]))
+#           coeffs.append(float(row[2]))
             
             
-# Print ROC curves + AUC score
-from sklearn import metrics
-fpr, tpr, roc_thresholds = metrics.roc_curve(y_holdout,predictions)
-AUC = metrics.auc(fpr,tpr)
-print("AUC score: ", AUC)
+    # Print ROC curves + AUC score
+    from sklearn import metrics
+    fpr, tpr, roc_thresholds = metrics.roc_curve(y_holdout,predictions)
+    auc = metrics.auc(fpr,tpr)
+    print("AUC score: ", auc)
+
+    data.append([fpr,tpr])
+    AUC.append(auc)
+    
+    # Print accuracy/cms
+    print( "cms for file : ",f)
+    print (np.mean(y_resampled==predictions))
 
 
 # Plot ROC curve
+data = [[fpr,tpr]]
+AUC = [auc]
+roc_labels=['Log Reg (TF-IDF) (area = %0.3f)']
 import matplotlib.pyplot as plt
-plt.plot(fpr,tpr,color='darkorange',lw=2,label='ROC Curve (area = %0.3f)' % AUC)
 plt.plot([0, 1], [0, 1], color='navy', lw=2, linestyle='--')
+for i,d in enumerate(data):
+    plt.plot(data[i][0],data[i][1],lw=2,label=roc_labels[i] % AUC[i])
 plt.xlabel('False Positive Rate')
 plt.ylabel('True Positive Rate')
 plt.title('Logistic Regression Receiver Operating Characteristic')
 plt.legend(loc="lower right")
 plt.savefig('roc.jpeg',bbox_inches='tight')
 plt.show()
+
+
+plt.hist([x for i,x in enumerate(predictions) if y_resampled[i]==0])
+plt.hist([x for i,x in enumerate(predictions) if y_resampled[i]==1])
+#plt.hist(y_resampled)
+plt.show()
+sum(predictions < .5)/float(len(predictions))
+
 
 # Plot histogram of coefficients
 bins = np.linspace(np.min(coeffs), np.max(coeffs), 50)
