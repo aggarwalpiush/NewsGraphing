@@ -7,15 +7,29 @@ blacklist = String["twitter.com", "facebook.com", "youtube.com", "instagram.com"
                 "plus.google.com", "linkedin.com", "t.co", "itunes.apple.com",
                 "pinterest.com", "flickr.com", "bit.ly", "play.google.com"]
 
-function constructGraph(body; minsamp=1, giant=false, mut=false)
+
+function blacklist_test(src,by_domain)
+  if by_domain
+    blacklist_bool = ~(src in blacklist)
+  else
+    blacklist_bool = ~any(x->contains(src,x),blacklist)
+  end
+  return blacklist_bool
+end
+
+function constructGraph(body; minsamp=1, giant=false, mut=false, by_domain=true)
     s2i = Dict{String, Int}()
     i2s = Dict{Int, String}()
     count = 0
 
     for src in keys(body)
-        if ~any(x->contains(src,x),blacklist) #~(src in blacklist)
+        # check if src in blacklist
+        blacklist_bool_src = blacklist_test(src,by_domain)
+        if blacklist_bool_src
             for dst in keys(body[src])
-                if body[src][dst] > minsamp && ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                # check if dst in blacklist
+                blacklist_bool_dst = blacklist_test(dst,by_domain)
+                if body[src][dst] > minsamp && blacklist_bool_dst && (~mut || body[dst][src] > minsamp) && src != dst
                     if ~haskey(s2i, src)
                         count += 1
                         s2i[src] = count
@@ -33,9 +47,13 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
 
     G = Graph(count)
     for src in keys(body)
-        if ~any(x->contains(src,x),blacklist) #~(src in blacklist)
+        # check if src in blacklist
+        blacklist_bool_src = blacklist_test(src,by_domain)
+        if blacklist_bool_src
             for dst in keys(body[src])
-                if body[src][dst] > minsamp &&  ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                # check if dst in blacklist
+                blacklist_bool_dst = blacklist_test(dst,by_domain)
+                if body[src][dst] > minsamp &&  blacklist_bool_dst && (~mut || body[dst][src] > minsamp) && src != dst
                     add_edge!(G, s2i[src], s2i[dst])
                 end
             end
@@ -62,7 +80,9 @@ function constructGraph(body; minsamp=1, giant=false, mut=false)
             src = si2s[j]
             if src in keys(body)
                 for dst in keys(body[src])
-                    if body[src][dst] > minsamp && ~any(x->contains(dst,x),blacklist) && (~mut || body[dst][src] > minsamp) && src != dst
+                    # check if dst in blacklist
+                    blacklist_bool_dst = blacklist_test(dst, by_domain)
+                    if body[src][dst] > minsamp && blacklist_bool_dst && (~mut || body[dst][src] > minsamp) && src != dst
                         add_edge!(H, j, ss2i[dst])
                     end
                 end
@@ -76,10 +96,8 @@ end
 function reality(bias, dom, key)
     biasnames = bias[2]
     bias = bias[1]
-    if any(x->contains(dom,x),biasnames) #x in biasnames
-        #v = bias[find(biasnames .== x)[1], 4]
+    if any(x->contains(dom,x),biasnames) #|| dom in biasnames
         idx = findin([contains(dom,x) for x in biasnames],true)[1]
-        #v = bias[find(biasnames .== x)[1], 3] #cred label
         if key == "fake"
             v = bias[idx,3] #cred label
             if isna(v)
@@ -120,13 +138,38 @@ function plotGraph(bias, G, s2i, i2s, lx, ly; color="bias", path="plot/plot.png"
     draw(PNG(path, 60cm, 60cm), plo)
 end
 
-function makeFolds(G, folds)
+function makeFolds(G, folds) # makeFolds(G, k, i2s, domainmap)
     srand(42)
     v2f = Dict{Int, Int}()
     for v in 1:nv(G)
         v2f[v] = rand(1:folds)
     end
     return v2f
+
+    # f2domList = Dict{Int,Vector{String}}()
+    # for f in 1:folds
+    #     f2domList[f] = String[]
+    # end
+    #
+    # for v in 1:nv(G)
+    #     fold = rand(1:folds)
+    #     dom = domainmap[i2s[v]]
+    #
+    #     for f in 1:folds
+    #         if (dom in f2domList[f])
+    #             push!(f2domList[f],dom)
+    #             fold = f
+    #             break
+    #         else
+    #             if f == folds
+    #                 push!(f2domList[fold],dom)
+    #             end
+    #         end
+    #     end
+    #
+    #     v2f[v] = fold
+    # end
+    # return v2f
 end
 
 function makeBeliefs(bias, G, s2i, i2s, key; folds=nothing, fold=1)

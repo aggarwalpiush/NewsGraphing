@@ -8,10 +8,17 @@ include("graphing.jl")
 include("beliefprop.jl")
 include("Psis.jl")
 
-EDGEFILE = "data/save2.feather"
+EDGEFILE = "data/save.feather"
 BIASFILE = "data/bias.csv"
 plotdir = "results/plots/"
-keys = ["bias", "fake"]
+problem_types = ["bias", "fake"]
+epsilon = 0.34
+
+if EDGEFILE == "data/save.feather"
+  by_domain_flag = true
+elseif EDGEFILE == "data/save2.feather"
+  by_domain_flag = false
+end
 
 save = loadSave(EDGEFILE)
 
@@ -21,14 +28,14 @@ save = loadSave(EDGEFILE)
 
 bias = loadBias(BIASFILE)
 
-cats = buildWeb(save) #only mutual links for "a"
+cats = buildWeb(save, by_domain_flag) #only mutual links for "a"
 
 edgeunion = countunion(cats["a"], cats["img"])
 @time for x in ["link", "script"]
     countunion!(edgeunion, cats[x])
 end
 
-sets = [("union", 1)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
+sets = [("union", 50)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
 
 #s2p = Dict{String, Array}()
 
@@ -44,22 +51,24 @@ for (sn, set) in enumerate(sets)
     else
       edgeset = cats[set[1]]
     end
-    G, s2i, i2s = constructGraph(edgeset, minsamp=set[2], giant=false)
-    #G2, s2i2, i2s2 = constructGraph(edgeset, minsamp=set[2], giant=true)
+
+    # if ~by_domain_flag
+    #   domainmap = Dict{String, String}()
+    #   for j in edgeset
+    #     domainmap[j.first] = split(j.first, '/')[1]
+    #     for i in j.second
+    #       domainmap[i.first] = split(i.first, '/')[1]
+    #     end
+    #   end
+    # end
+
+    G, s2i, i2s = constructGraph(edgeset, minsamp=set[2], giant=false, by_domain=by_domain_flag)
+    #G2, s2i2, i2s2 = constructGraph(edgeset, minsamp=set[2], giant=true, by_domain=by_domain_flag)
     println(minimum([length([x for x in all_neighbors(G, v) if x != v]) for v in 1:nv(G)]))
     lx, ly = spring_layout(G)
     #lx2, ly2 = spring_layout(G2)
 
-    # for site in biasnames
-    #   v2r = Dict{Int, Dict{String,Int}}()
-    #   for v in nv(G)
-    #     v2r[v] = Dict{String,Int}()
-    #     v2r[v]["bias"] = reality(bias, site, "bias")
-    #     v2r[v]["fake"] = reality(bias, site, "fake")
-    #   end
-    # end
-
-    for key in keys
+    for key in problem_types
         p = plot()
         plot!(p, [0, 1], [0, 1], line=:dash, label="")
         println(key*string(set))
@@ -81,12 +90,12 @@ for (sn, set) in enumerate(sets)
         # plotGraph(bias, G2, s2i2, i2s2, lx2, ly2, color=b[:,1],
         #             path=mydir*key*"prop_main.png")
 
-        folds = makeFolds(G, k)
+        folds = makeFolds(G, k) # makeFolds(G, k, i2s, domainmap)
         aucs = []
         for f in 1:k
           println("Fold " *string(f))
             ϕ = makeBeliefs(bias, G, s2i, i2s, key, folds=folds, fold=f)
-            pr, b, lodds = beliefprop(G, ϕ, Psis(0.34), 2);
+            pr, b, lodds = beliefprop(G, ϕ, Psis(epsilon), 2);
             # for v in 1:nv(G)
             #     if folds[v] == f
             #         site = i2s[v]

@@ -25,7 +25,7 @@ function loadBias(filename)
 end
 
 """
-    buildWeb(df)
+    buildWeb(df, by_domain=true)
 
 Build a data structure for storing the links in an indexed form.
 
@@ -33,8 +33,11 @@ The first key is the type of link one of: ["a", "link", "script", "img", "mut"]
 where a,link,script, and img are html tag types, and mut is "mutual a links".
 
 df is a dataframe with columns sdom, ddom, type as the first three columns.
+
+if by_domain is false, then we look for the 4th and 5th columns which have the filtered
+article identifiers.
 """
-function buildWeb(df)
+function buildWeb(df, by_domain=true)
     cats = Dict{String, Dict}()
     for key in ["a", "link", "script", "img", "mut"]
         cats[key] = Dict{String, Dict}()
@@ -42,9 +45,17 @@ function buildWeb(df)
 
     p = Progress(size(df, 1), 0.1)
     for i in 1:size(df, 1)
-        sdom = get(df[i, 4]) # rsrc
-        ddom = get(df[i, 5]) # rdest #get(df[i, 2])
-        domain = get(df[i,:dest]) # domain
+        # check if dataset is by article or by domain
+        # discriminating between save and save2 feather files
+        if by_domain
+          # by domain
+          sdom = get(df[i, 1]) # sdom
+          ddom = get(df[i, 2]) # ddom
+        else
+          # by article
+          sdom = get(df[i, 4]) # rsrc
+          ddom = get(df[i, 5]) # rdest
+        end
         if isascii(sdom) && isascii(ddom)
             cat = cats[get(df[i, 3])] # linktype
             if ~haskey(cat, sdom)
