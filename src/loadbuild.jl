@@ -45,8 +45,7 @@ function buildWeb(df, by_domain=true)
 
     p = Progress(size(df, 1), 0.1)
     for i in 1:size(df, 1)
-        # check if dataset is by article or by domain
-        # discriminating between save and save2 feather files
+       # discriminating between save and save2 feather files
         if by_domain
           # by domain
           sdom = get(df[i, 1]) # sdom
@@ -71,6 +70,7 @@ function buildWeb(df, by_domain=true)
     end
 
     p = Progress(length(cats["a"]), 0.1)
+    println(cats["a"])
     for src in keys(cats["a"])
         for dst in keys(cats["a"][src])
             if haskey(cats["a"], dst) && haskey(cats["a"][dst], src)

@@ -20,6 +20,12 @@ elseif EDGEFILE == "data/save2.feather"
   by_domain_flag = false
 end
 
+if EDGEFILE == "data/save.feather"
+  by_domain_flag = true
+elseif EDGEFILE == "data/save2.feather"
+  by_domain_flag = false
+end
+
 save = loadSave(EDGEFILE)
 
 # size(unique(save[:sdom]))
@@ -34,6 +40,7 @@ edgeunion = countunion(cats["a"], cats["img"])
 @time for x in ["link", "script"]
     countunion!(edgeunion, cats[x])
 end
+
 
 sets = [("union", 50)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
 
@@ -51,6 +58,7 @@ for (sn, set) in enumerate(sets)
     else
       edgeset = cats[set[1]]
     end
+
 
     # if ~by_domain_flag
     #   domainmap = Dict{String, String}()
