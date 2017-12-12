@@ -5,67 +5,123 @@ Created on Mon Sep 18 10:01:51 2017
 @author: nfitch3
 """
 
-from pymongo import MongoClient
-import sys
-import tldextract
-#import matplotlib.pyplot as plt
-import itertools
-import math
-import numpy as np
+import argparse
+import os.path
+# import tldextract
+import logging
 import re
-import pickle
+
 import feather
-from tqdm import tqdm
 import pandas as pd
-import pickle
-import psycopg2 as pg
-import csv
+from pymongo import MongoClient
+
+PROGRESS = False
+try:
+    from tqdm import tqdm
+except ImportError:
+    logging.warning('tqdm is not installed, progress meters will not be available.')
+    PROGRESS = True
+
+logging.basicConfig(format='%(asctime)s - %(levelname)s - %(message)s', level=logging.INFO)
+
+DEFAULTCONN = 'mongodb://gdelt:meidnocEf1@10.51.4.177:20884/'
+re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
+wgo = re.compile("www.")
 
 
+def connect(connstring):
+    """
+    connect(connstring) connects to a mongodb instance using a single connections string
+    """
+    client = MongoClient(connstring)
+    logging.info(client.admin.command('ismaster'))
+    db = client.gdelt.metadata
+    return client, db
 
-
-# client = MongoClient('mongodb://gdelt:meidnocEf1@gdeltmongo1:27017/')
-# client = MongoClient('mongodb://gdelt:meidnocEf1@10.51.4.172:18753/')
-#client = MongoClient('mongodb://gdelt:meidnocEf1@11.7.124.26:27017/')
-client = MongoClient('mongodb://gdelt:meidnocEf1@10.51.4.177:20884/')
-print(client.admin.command('ismaster'))
-db = client.gdelt.metadata
 
 def valid(s, d):
-    if  len(d) > 0 and d[0] not in ["/", "#", "{"] and s not in d :
+    if len(d) > 0 and d[0] not in ["/", "#", "{"] and s not in d:
         return True
     else:
         return False
 
 
-re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
-wgo = re.compile("www.")
-
-fulldata = []
-if len(sys.argv) < 2:
-    N = 10000
-else:
-    N = int(sys.argv[1])
-print("using a limit of {}".format(N))
-stuff = db.find({},{'links':1,'sourceurl':1}).sort("_id",-1).limit(N)
-#stuff = db.find().sort("_id",-1).limit(N)
-print("downloaded!")
-for obj in tqdm(stuff):
-    if 'links' in obj:
-        sdom = re_3986.match(obj['sourceurl']).group(4)
-        for link in obj['links']:
-            if sdom and valid(sdom, link[0]):
-                ddom = re_3986.match(link[0]).group(4)
-                if ddom:
-                    fulldata.append([wgo.sub("",sdom), wgo.sub("",ddom), link[1]])
-
-       
-#df = pd.DataFrame(fulldata, columns=['sdom article ID','sdom', 'ddom', 'link'])
-df = pd.DataFrame(fulldata, columns=['sdom', 'ddom', 'link'])
-
-feather.write_dataframe(df, "save.feather")
-
-#test = feather.read_dataframe("save.feather")
+def filetype(path):
+    """determing the filetype of a path from its extension"""
+    if os.path.splitext(path)[1] == '.feather':
+        return 'feather'
+    elif os.path.splitext(path)[1] == '.csv':
+        return 'csv'
+    raise(Exception('{} is neither a feather nor csv file'.format(path)))
 
 
+def extract_domain(url):
+    return re_3986.match(url).group(4)
 
+
+def collect_links(db, query, limit, quiet=False):
+    """collect_links takes a mongodb connection and a limitand pulls all the links out of the mongo.
+
+    limit: the number of records to pull: -1 for all of them
+
+    uses tqdm to show progress.
+    """
+    N = limit
+    fulldata = []
+    print("using a limit of {}".format(N))
+
+    stuff = db.find({}, query).sort("_id", -1).limit(N)
+    # stuff = db.find().sort("_id",-1).limit(N)
+    print("downloaded!")
+    iterations = stuff
+    if not quiet and PROGRESS:
+        iterations = tqdm(stuff)
+    for obj in iterations:
+        if 'links' in obj:
+            sdom = extract_domain(obj['sourceurl'])
+            if not sdom:
+                continue
+            for link in obj['links']:
+                if valid(sdom, link[0]):
+                    ddom = extract_domain(link[0])
+                    if ddom:
+                        linktype = link[1]
+                        row = [wgo.sub("", sdom), wgo.sub("", ddom), linktype]
+                        fulldata.append(row)
+    return fulldata
+
+
+def parse_arguments():
+    desc = 'Pull down the data from a mongodb to a static file.'
+    parser = argparse.ArgumentParser(description=desc)
+    parser.add_argument('limit', metavar='N', type=int,
+                        help='Limit on the number of articles -1 for all of them')
+
+    parser.add_argument('-o', '--outfile', default='save.feather', type=str,
+                        help='path to store the resulting data')
+
+    parser.add_argument('-c', '--connection', type=str,
+                        default=DEFAULTCONN, help='The mongodb connections string')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        default=DEFAULTCONN, help='The mongodb connections string')
+    return parser.parse_args()
+
+
+if __name__ == '__main__':
+    args = parse_arguments()
+    N = args.limit
+    outfile = args.outfile
+    conn = args.connection
+    quiet = args.quiet
+    query = {'links': 1, 'sourceurl': 1}
+    client, db = connect(conn)
+    fulldata = collect_links(db, query, N, quiet)
+
+    # df = pd.DataFrame(fulldata, columns=['sdom article ID','sdom', 'ddom', 'link'])
+    df = pd.DataFrame(fulldata, columns=['sdom', 'ddom', 'link'])
+
+    ftp = filetype(outfile)
+    if ftp == 'feather':
+        feather.write_dataframe(df, outfile)
+    else:
+        df.to_csv(outfile)
