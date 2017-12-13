@@ -55,7 +55,7 @@ def get_sentiment(w,sdom,contextString,labelDict):
 
     bias_label = labelDict[sdom]['bias']
     cred_label = labelDict[sdom]['cred']
-    score = sa.polarity_scores(contextString)['compound']
+    score = sa.polarity_scores(contextString)['compound'] #- sa.polarity_scores(w)['compound'] 
     
     sentiment = {'sdom':sdom,'bias':bias_label,'cred':cred_label,'score':score}
         
@@ -80,7 +80,7 @@ def find_subject(myString):
     
     doc = nlp(myString)
     
-    nouns = [i for i in doc.noun_chunks]
+    #nouns = [i for i in doc.noun_chunks]
     sub_toks = [word for word in doc if (word.dep_ == "nsubj") ]
     
     return sub_toks
