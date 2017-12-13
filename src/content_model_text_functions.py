@@ -41,7 +41,7 @@ from nltk.stem.snowball import SnowballStemmer
 from nltk import tokenize, word_tokenize, sent_tokenize
 
 #import spacy
-#import en_core_web_sm
+import en_core_web_sm
 from gensim.models.doc2vec import Doc2Vec
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
 
@@ -74,6 +74,16 @@ def get_sentiment(w,sdom,contextString,labelDict):
         
     return sentiment #liberal_avg_score, conservative_avg_score, sentiment
 
+def find_subject(myString):
+    # use spacy to find subject in sentence
+    nlp = en_core_web_sm.load()
+    
+    doc = nlp(myString)
+    
+    nouns = [i for i in doc.noun_chunks]
+    sub_toks = [word for word in doc if (word.dep_ == "nsubj") ]
+    
+    return sub_toks
 
 def text_to_vector(model, text):
     text_words = remove_stop_words(word_tokenize(text))
@@ -290,12 +300,19 @@ def create_context(contextWord,myCorpus,window,i2s):
             # split into sentences, remove punctuation, remove stop words
             sentences = sent_tokenize(text)
             sentences = [remove_punctuation(s) for s in sentences]
-            sentences = [' '.join(remove_stop_words(word_tokenize(s))) for s in sentences]
+            #sentences = [' '.join(remove_stop_words(word_tokenize(s))) for s in sentences]
             #            indices = [i for i,x in enumerate(tokens) if x == contextWord]
             # grab sentences in which contextWord appears
             sentences = [sentence for sentence in sentences if contextWord in sentence] #i<len(tokens)-1 and contextWord in tokens[i]+' '+tokens[i+1]]
             context['tf'] = len(sentences)
             context['sentences'] = sentences
+            
+            # filter sentences where contextWord is the subject
+#            keep_sentences = []
+#            for sentence in sentences:
+#                subject = find_subject(sentence)
+#                if subject == contextWord:
+#                    keep_sentences.append(sentence)
 #            for i,index in enumerate(indices):
 #                if (index-window)>=0:
 #                    start = index-window

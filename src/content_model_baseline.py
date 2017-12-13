@@ -520,7 +520,7 @@ word2sentiment = {}
 dom2sentiment = {}
 sentiment_stats_per_article = {}
 #top_words = [w[0] for w in top_n_words_0] + [w[0] for w in top_n_words_1]
-top_words = ['president trump']#,'antifa','president trump','sputnik','crore','rs']
+top_words = ['obamacare','affordable care act','donald trump','hillary clinton']#,'antifa','president trump','sputnik','crore','rs']
 for w in top_words:
     sentiment_stats_per_article[w] = []
     word2context[w] = create_context(w,corpus,20,i2s)
