@@ -1,17 +1,14 @@
-# -*- coding: utf-8 -*-
-"""
-Created on Thu Sep 21 11:44:16 2017
-
-@author: nfitch3
-"""
-
 
 from __future__ import unicode_literals, print_function
 
+import logging
+import re
 from sklearn.feature_extraction.text import TfidfVectorizer#, TfidfTransformer, CountVectorizer
+from sklearn.model_selection import GroupKFold
 #import string
 import numpy as np
 import os
+import dataset
 #from sklearn import feature_extraction
 from sklearn.metrics import accuracy_score
 from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
@@ -23,10 +20,8 @@ from sklearn.svm import SVC
 from sklearn.ensemble import RandomForestClassifier
 #from sklearn import naive_bayes
 from sklearn.linear_model import LogisticRegression
-
 import matplotlib.pyplot as plt
-
-from dataset import get_article_text
+from dataset import get_article_text#, writetextcsv, writecleancsv
 import csv
 from collections import Counter
 #from sklearn.pipeline import Pipeline
@@ -34,20 +29,49 @@ from collections import Counter
 import sys
 #from split_dataset import generate_hold_out_split
 from sklearn.metrics import confusion_matrix
-from imblearn.under_sampling import RandomUnderSampler
-from imblearn.over_sampling import RandomOverSampler
 #from nltk.stem.snowball import SnowballStemmer
 #import nltk
 #nltk.download('punkt')
 from nltk import tokenize, word_tokenize
-
 #import spacy
 #import en_core_web_sm
 #from gensim.models.doc2vec import Doc2Vec
 #from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
-from content_model_text_functions import *
+from content_model_text_functions import clean
 
-def make_predictions(training_set,test_set,CLFNAME,sample_weights=None):
+def record_results(data,FILENAME,name_arg=None):
+    predictions = data[0]
+    truth = data[1]
+    
+    if name_arg is None:
+        NAME = FILENAME
+    else:
+        NAME = FILENAME +'_'+str(name_arg)
+        
+    with open(PATH + NAME + '_results.csv', "w",encoding='utf-8') as f:
+        writer = csv.writer(f,lineterminator = '\n')
+        writer.writerow(['predictions','truth'])
+        for i,p in enumerate(predictions):
+            writer.writerow([p,truth[i]])
+            
+    return 
+
+def evaluate_classifier(predictions,truth):
+    
+    # Check that predictions are integers
+    if not all(type(item)==int for item in predictions):
+        predictions = [1 if p >=.5 else 0 for p in predictions]
+        
+    # Compute Accuracy
+    score = accuracy_score(truth, predictions)
+    
+    # Print confusion matrix
+    cms = confusion_matrix(truth, predictions)
+    print(cms)
+    
+    return score, cms
+
+def fit_and_predict(training_set,test_set,CLFNAME,sample_weights=None):
     X_train = training_set[0]
     y_train = training_set[1]
         
@@ -68,16 +92,9 @@ def make_predictions(training_set,test_set,CLFNAME,sample_weights=None):
     
     # Make predictions
     print("making predictions...")
-    predictions = clf.predict(X_test)
+    predictions = clf.predict_proba(X_test)[:,1]
         
-    # Score it
-    print("calculating acc score...")
-    score = accuracy_score(y_test, predictions)
-    print('CV score: ', score)
-    cms = confusion_matrix(y_test, predictions)
-    print(cms)
-        
-    return clf, score, cms
+    return clf, predictions
 
 def k_fold_CV(k,X,y,CLFNAME):
     
@@ -132,7 +149,12 @@ def k_fold_CV(k,X,y,CLFNAME):
         # Fit classifier and get predictions
         training_set = [X_train_tfidf,y_train_fold]
         test_set = [X_test_tfidf,y_test_fold]
-        clf, score, cms = make_predictions(training_set,test_set,CLFNAME,sample_weights)
+        clf, predictions = fit_and_predict(training_set,test_set,CLFNAME,sample_weights)
+        
+        # Evaluate classifier
+        score,cms = evaluate_classifier(predictions,y_test_fold)
+    
+        print('Fold '+str(fold)+' score: ', score)
     
         # Keep best classifier
         if score > best_score:
@@ -147,37 +169,26 @@ def k_fold_CV(k,X,y,CLFNAME):
 
 
 def get_problem_set(dataset,LABELNAME,labels,i2s):
-    # Reorganize labels and choose classification problem
-    if LABELNAME == 'bias':
-        l = 0
-    elif LABELNAME == 'cred':
-        l = 1
-    
-    label_type = ['bias','cred']
-    test_label_type = label_type[l]
-    test_labels = [[['L','LC'],['R','RC'],['na','C']],[['LOW','VERY LOW'],['HIGH', 'VERY HIGH'],['na','MIXED']]]
+    # Aggregate labels and associated article/domain information by chosen classification task
+    test_labels = {'bias':[['L','LC'],['R','RC'],['na','C']],'cred':[['LOW','VERY LOW'],['HIGH', 'VERY HIGH'],['na','MIXED']]}
     article_ids = []
     associated_labels = []
     associated_domains = []
     i2l = {}
-    for i,x in enumerate(clean_corpus):
+    for i,x in enumerate(dataset):
         sdom = i2s[i]
-        if labels[sdom][test_label_type] not in test_labels[l][2]:
-            if labels[sdom][test_label_type] in test_labels[l][0]:
+        if labels[sdom][LABELNAME] not in test_labels[LABELNAME][2]:
+            if labels[sdom][LABELNAME] in test_labels[LABELNAME][0]:
                 associated_labels.append(0)
                 article_ids.append(i)
                 i2l[i] = 0
                 associated_domains.append(sdom)
-            elif labels[sdom][test_label_type] in test_labels[l][1]:
+            elif labels[sdom][LABELNAME] in test_labels[LABELNAME][1]:
                 associated_labels.append(1)
                 article_ids.append(i)
                 i2l[i] = 1
                 associated_domains.append(sdom)
-   #        elif labels[sdom][test_label] in ['C']:
-    #            associated_labels.append(2)
-    #            article_ids.append(i)
-    #            i2l[i] = 2
-        elif l==1 and labels[sdom]['flag'] in flag:
+        elif LABELNAME == 'cred' and labels[sdom]['flag'] in flag:
             associated_labels.append(0)
             article_ids.append(i)
             i2l[i] = 0
@@ -189,6 +200,7 @@ def get_problem_set(dataset,LABELNAME,labels,i2s):
 
 
 # main
+logging.basicConfig(format='%(levelname)s %(asctime)-15s %(message)s', level=logging.INFO) 
 
 BIASFILE = '../data/bias.csv'
 CLF_ARGS = ['logreg','rf','svm']
@@ -211,8 +223,8 @@ if CLFNAME not in CLF_ARGS:
 # must be a valid task
 if LABELNAME not in LABEL_ARGS:
     sys.exit("Invalid task argument. Choose from " + str(LABEL_ARGS) + " as second argument.")
-        
-print("Generating results for arguments: ",(LABELNAME, CLFNAME))
+      
+print("Generating results for arguments: ", (LABELNAME, CLFNAME)) 
 
 FILENAME = CLFNAME + '_' + LABELNAME
 PATH = '../results/'
@@ -222,46 +234,20 @@ PATH = '../results/'
 pull_mongo_flag = True
 file_name = "../data/gdelt_text.csv"
 cleanfile = "../data/gdelt_text_clean.csv"
-clean_corpus = []
+clean_corpus = None
 if not (os.path.exists(file_name)):
     
+    logging.info("Downloading data from database") 
     #Get articles by domain name
     articles,corpus,s2l,i2s= get_article_text(BIASFILE)
     documents = articles.keys()
-    
-    #Write to file
-    with open(file_name, "w",encoding='utf-8') as f:
-        writer = csv.writer(f)
-        # Write header
-        writer.writerow(["article_id","sdom","text"])
-        # Concatenate each domain's text into corpus
-        #corpus = []
-        for i,article in enumerate(corpus):
-            # Write rows
-            sdom = i2s[i]
-            writer.writerow([i,sdom,article])
-            
-    f.close()
-        
-    with open(cleanfile, "w",encoding='utf-8') as f:
-        writer = csv.writer(f)
-        # Write header
-        writer.writerow(["article_id","sdom","text"])
-        # Concatenate each domain's text into corpus
-        #corpus = []
-        for i,article in enumerate(corpus):
-            # Write rows
-            sdom = i2s[i]
-            # Clean corpus along the way
-            clean_article = clean(article)
-            writer.writerow([i,sdom,clean_article])
-            
-            # Create cleaned corpus
-            clean_corpus.append(clean_article)
-    
-    f.close()
+    logging.info("writing out text corpus")
+    writetextcsv(file_name, corpus, i2s)
+    logging.info("writing out cleaned up text corpus")
+    clean_corpus = writecleancsv(clean, cleanfile, corpus, i2s)
 
 else:
+    logging.info("Reading data from cache")
     CLEAN = []
     # Read in articles from file_name
     maxInt = sys.maxsize
@@ -269,6 +255,7 @@ else:
     articles = {}
     i2s = {}
     corpus = []
+    clean_corpus = []
     with open(file_name, 'r',encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         next(reader)
@@ -282,6 +269,7 @@ else:
                 except OverflowError:
                     maxInt = int(maxInt/10)
                     decrement = True
+                    logging.info('decrementing csv field size limit.')
             # each row = article ID, sdom, article text
             if row[1] not in articles:
                 articles[row[1]] = []
@@ -293,6 +281,7 @@ else:
             # Create the mapping from article ID to sdom name
             i2s[i] = row[1]
             
+    logging.info("Reading data from clean file cache")    
     articles_by_sdom = []
     with open(cleanfile, 'r',encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
@@ -313,7 +302,9 @@ else:
             articles_by_sdom.append(row[1])
     
     sdom_counts = Counter(articles_by_sdom)
-    with open('../data/sdom_by_article.csv', "w",encoding='utf-8') as f:
+    datapath = '../data/sdom_by_article.csv'
+    logging.info("Writing count data to path {}".format(datapath))  
+    with open(datapath, "w",encoding='utf-8') as f:
         writer = csv.writer(f)
         # Write header
         writer.writerow(["sdom","number of articles"])
@@ -324,14 +315,13 @@ else:
             writer.writerow([key,sdom_counts[key]])
     
             
-print("Finished reading dataset")
+logging.info("Finished reading dataset")
 
 # Read in MBFC labels from bias.csv
 pol = ['L', 'LC', 'C', 'RC', 'R']
 rep = ['VERY LOW', 'LOW', 'MIXED', 'HIGH', 'VERY HIGH']
 flag = ['F', 'X', 'S']
 labels = {}
-import re
 
 re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
 #Regular Expression to process web domains into chunks
@@ -357,9 +347,10 @@ with open(BIASFILE, 'r',encoding='utf-8') as csvfile:
                 if row[3] in flag:
                     labels[name]['flag'] = row[3]
   
-print("Finished reading labels")
+logging.info("Finished reading labels")
 
-# partition dataset per problem arguments
+# aggregate total labeled dataset per given problem arguments
+logging.info('Aggregate labeled dataset for chosen classification task') 
 ARTICLE_IDs, ARTICLE_LABELS, ARTICLE_DOMAINS, article2label = get_problem_set(clean_corpus,LABELNAME,labels,i2s)
 
 print("number of articles with text : ", len(clean_corpus))    
@@ -368,10 +359,9 @@ print("distribution of labels : ", Counter(ARTICLE_LABELS))
 
 
 # Split labeled dataset into training set (80%) and holdout set (20%) with non-overlapping groups = ARTICLE_DOMAINS
-from sklearn.model_selection import GroupKFold
 group_kfold = GroupKFold(n_splits=5)
-for train_indicies,holdout_indicies in group_kfold.split(ARTICLE_IDs,ARTICLE_LABELS,ARTICLE_DOMAINS):
-    print("")
+splits = list(group_kfold.split(ARTICLE_IDs,ARTICLE_LABELS,ARTICLE_DOMAINS))
+train_indicies,holdout_indicies = splits[-1]
 
 # create training set
 X_train_ids = [ARTICLE_IDs[i] for i in train_indicies]   
@@ -427,7 +417,7 @@ best_clf, best_tfidf = k_fold_CV(k,X_TRAIN,y_TRAIN,CLFNAME)
 undersampler = RandomUnderSampler(random_state=42)
 oversampler = RandomOverSampler(random_state=42)
 X_holdout_ids = np.vstack(tuple([ARTICLE_IDs[i] for i in holdout_indicies]))
-if test_label_type == 'rep':
+if LABELNAME == 'cred':
     X_resampled,y_resampled = undersampler.fit_sample(X_holdout_ids,y_HOLDOUT)
 else:
     X_resampled = X_holdout_ids
@@ -446,15 +436,8 @@ print("holdout test score: ", np.mean(predictions==y_resampled))
 print (confusion_matrix(y_resampled, predictions))
 
 predictions = best_clf.predict_proba(X_holdout_tfidf)[:,1]
-
-
-# Records predictions and ROC/AUC
 # Write predictions to csv
-with open(PATH + FILENAME + '_results.csv', "w",encoding='utf-8') as f:
-    writer = csv.writer(f,lineterminator = '\n')
-    writer.writerow(['predictions','truth'])
-    for i,p in enumerate(predictions):
-        writer.writerow([p,y_HOLDOUT[i]])
+record_results([predictions,y_HOLDOUT],FILENAME)
 
 
 # Get most informative features
@@ -494,19 +477,19 @@ if CLFNAME == 'logreg':
     plt.show()
  
 
-
+X_holdout_ids = [ARTICLE_IDs[i] for i in holdout_indicies]
 # Get context
 word2context = {}
-word2sentiment = {}
-dom2sentiment = {}
 sentiment_stats_per_article = {}
-sentiment_feature_vector = []
+sentiment_feats_training = []
+sentiment_feats_holdout = []
 #top_words = [w[0] for w in top_n_words_0] + [w[0] for w in top_n_words_1]
 top_words = ['obamacare','affordable care act']#,'donald trump','hillary clinton']#,'antifa','president trump','sputnik','crore','rs']
 for w_idx,w in enumerate(top_words):
     sentiment_stats_per_article[w] = []
     word2context[w] = create_context(w,corpus,20,i2s)
-    sentiment_feature_vector.append([0]*len(X_train_ids))
+    sentiment_feats_training.append([0]*len(X_train_ids))
+    sentiment_feats_holdout.append([0]*len(X_holdout_ids))
     for line in word2context[w]:
         # reset with each article
         sent_scores = []
@@ -532,22 +515,35 @@ for w_idx,w in enumerate(top_words):
         # check that article is in labeled training dataset
         if article_id in X_train_ids:
             idx = X_train_ids.index(article_id)
-            sentiment_feature_vector[w_idx][idx] = article_avg
+            sentiment_feats_training[w_idx][idx] = article_avg
+
+        
+        if article_id in X_holdout_ids:
+            idx = X_holdout_ids.index(article_id)
+            sentiment_feats_holdout[w_idx][idx] = article_avg
             
-vector = np.transpose(np.array(sentiment_feature_vector)) #each column is feature for word 'w'
-#concatenate together: X_train_tfidf and vector..maybe using scipy.sparse.hstack
+# create TF-IDF matrix on entire training set
+X_train_tfidf = best_tfidf.fit_transform(X_TRAIN)
+#concatenate TF-IDF and sentiment features
+from scipy import sparse
+vector = np.transpose(np.array(sentiment_feats_training)) #each column is feature for word 'w'
+X_train_combined = sparse.hstack([X_train_tfidf,vector])
+# retrain best classifier from CV
+test=best_clf.fit(X_train_combined,y_TRAIN)
 
-plt.figure()
-plt.hist([art['mean'] for art in sentiment_stats_per_article[w] if art['bias'] in ["R"]])
-plt.figure()
-plt.hist([art['mean'] for art in sentiment_stats_per_article[w] if art['bias'] in ["L"]])
+X_holdout_tfidf = best_tfidf.transform(X_HOLDOUT)
+vector = np.transpose(np.array(sentiment_feats_holdout)) 
+X_holdout_combined = sparse.hstack([X_holdout_tfidf,vector])
+predictions = best_clf.predict(X_holdout_combined)
 
+acc,cms = evaluate_classifier(predictions,y_HOLDOUT)
+print(acc)
 
-# concatenate all features
-training_set = [X_train_tfidf,y_train_fold]
-test_set = [X_test_tfidf,y_test_fold]
- # retrain classifier and get predictions       
-clf, score, cms = make_predictions(training_set,test_set,sample_weights,CLFNAME)
+#plt.figure()
+#plt.hist([art['mean'] for art in sentiment_stats_per_article[w] if art['bias'] in ["R"]])
+#plt.figure()
+#plt.hist([art['mean'] for art in sentiment_stats_per_article[w] if art['bias'] in ["L"]])
+
 
 
 ## Plot source distribution histogram color-coded according to bias

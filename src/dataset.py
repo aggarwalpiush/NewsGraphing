@@ -4,74 +4,26 @@ Created on Thu Sep 21 14:15:52 2017
 
 @author: nfitch3
 """
-
-
-
-#import matplotlib.pyplot as plt
-import numpy as np
 from pymongo import MongoClient
-import tldextract
-import math
 import re
-import pickle
-from tqdm import tqdm_notebook as tqdm
-#import spacy
-from numpy import dot
-from numpy.linalg import norm
 import csv
-import random
-import statistics
-import copy
-import itertools
-#from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
-#from sklearn import svm
-#from sklearn.model_selection import cross_val_score
-#from sklearn.model_selection import ShuffleSplit, KFold
-#from sklearn.metrics import confusion_matrix
-#from sklearn.metrics import accuracy_score
-#from sklearn.ensemble import RandomForestClassifier
-#from sklearn.feature_extraction.text import TfidfTransformer
-#import scipy
 
-from ipywidgets import IntProgress
-#from spacy.en import English
+defaultmgoclient = MongoClient('mongodb://gdelt:meidnocEf1@10.51.4.177:20884/')
+re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
 
 
-#import sys  
-#from imp import reload
-#reload(sys)  
-#sys.setdefaultencoding('utf8')
-#print(sys.getdefaultencoding())
-
-def get_article_text(BIASFILE):
-    
-#    nlp = spacy.load('en')
-    #Load the Spacy English Language model
-
-
-    client = MongoClient('mongodb://gdelt:meidnocEf1@10.51.4.177:20884/')
-    #Connect to the GDELT Mongo database
-    #Credentials might be different now, ask David
-    db = client.gdelt.metadata
-
-
-    re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
-    #Regular Expression to process web domains into chunks
-    wgo = re.compile("www.")
-    #For replacing www.
-    whitelist = ["NOUN", "PROPN", "ADJ", "ADV"]
-    #Types of words we'll look at
-
-
-    #This opens up the MBFC labels which were scraped off their website
+def readbiasfile(filename):
+    """This opens up the MBFC labels which were scraped off their website"""
     bias = []
     biasnames = []
-    pol = ['L', 'LC', 'C', 'RC', 'R'] #Political Bias
-    rep = ['VERY LOW', 'LOW', 'MIXED', 'HIGH', 'VERY HIGH'] #Reporting Quality
-    flag = ['F', 'X', 'S'] #Fake categories: Fake, Conspiracy, Satire
-    cats = pol
+    # Political Bias
+    pol = ['L', 'LC', 'C', 'RC', 'R']
+    # Reporting Quality
+    rep = ['VERY LOW', 'LOW', 'MIXED', 'HIGH', 'VERY HIGH']
+    # Fake categories: Fake, Conspiracy, Satire
+    flag = ['F', 'X', 'S']
     s2l = {}
-    with open(BIASFILE, 'r',encoding='utf-8') as csvfile:
+    with open(filename, 'r', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
             print(row)
@@ -88,15 +40,30 @@ def get_article_text(BIASFILE):
                 f = flag.index(row[3])
                 s2l[name] = row[3]
             bias.append(row + [name, p, r, f, 1 if p == -1 else 0])
-            
-            if (p!=-1 or r!=-1) and name not in biasnames:
+
+            if (p != -1 or r != -1) and name not in biasnames:
                 biasnames.append(name)
-    # print(bias)
-    # print(biasnames)
+    return bias, biasnames, s2l
 
-    sample = 1000
-    stuff = db.find({},{'text':1,'sourceurl':1}).sort("_id",-1).limit(sample)
 
+def sourcedomain(obj):
+    """parse out the domain of the sourcurl field of a mongo object"""
+    wgo = re.compile("www.")
+    return wgo.sub("", re_3986.match(obj['sourceurl']).group(4))
+
+
+def get_article_text(biasfile, mgoclient, sample=1000):
+    """download articles from the mongo client and for return the text for all the domains
+    that are labeled according to biasfile."""
+    # Connect to the GDELT Mongo database
+    db = mgoclient.gdelt.metadata
+    # Regular Expression to process web domains into chunks
+    # For replacing www.
+    # whitelist = ["NOUN", "PROPN", "ADJ", "ADV"]
+    # Types of words we'll look at
+    bias, biasnames, s2l = readbiasfile(biasfile)
+    biasnameset = set(biasnames)
+    stuff = db.find({}, {'text': 1, 'sourceurl': 1}).sort("_id", -1).limit(sample)
     arts = {}
     counts = {}
     print('Number of domains with at least one label', len(set(biasnames)))
@@ -104,15 +71,15 @@ def get_article_text(BIASFILE):
     i2s = {}
     article_id_count = 0
     corpus = []
-    #Download articles and process them with SpaCy
+    # Download articles and process them with SpaCy
     for obj in stuff:
         if 'text' in obj:
-            sdom = wgo.sub("", re_3986.match(obj['sourceurl']).group(4))
-            if sdom in biasnames:
-                #doc = nlp.tokenizer(obj['text'][:100*8])
-                #nlp.tagger(doc)
-                #Only break into tokens and give them part of speech tags
-                #doc_sentences = [sent.string.strip() for sent in doc.sents]
+            sdom = sourcedomain(obj)
+            if sdom in biasnameset:
+                # doc = nlp.tokenizer(obj['text'][:100*8])
+                # nlp.tagger(doc)
+                # Only break into tokens and give them part of speech tags
+                # doc_sentences = [sent.string.strip() for sent in doc.sents]
                 doc = ' '.join(obj['text'].split())
                 if sdom not in arts.keys():
                     arts[sdom] = []
@@ -124,18 +91,47 @@ def get_article_text(BIASFILE):
                 corpus.append(doc)
                 arts[sdom].append(doc)
                 counts[sdom] += 1
-            
+
     print('Number of domains with text and at least one label', len(arts.keys()))
     print('Total number of articles: ', sum(counts.values()))
 
-    return (arts,corpus,s2l,i2s)
+    return (arts, corpus, s2l, i2s)
 
-#import pandas as pd
-#df = pd.DataFrame(arts)
-#df.to_csv('test.csv', index=False, header=False)
-#
-#import csv
-#
-#with open("output.csv", "wb") as f:
-#    writer = csv.writer(f)
-#    writer.writerows(a)
+
+def writetextcsv(file_name, corpus, i2s):
+    """Clean up the text from the articles."""
+    with open(file_name, "w", encoding='utf-8') as f:
+        writer = csv.writer(f)
+        # Write header
+        writer.writerow(["article_id", "sdom", "text"])
+        # Concatenate each domain's text into corpus
+        for i, article in enumerate(corpus):
+            # Write rows
+            sdom = i2s[i]
+            writer.writerow([i, sdom, article])
+
+
+def writecleancsv(cleanfunc, cleanfile, corpus, i2s):
+    """write out the cleaned up text into to csv file.
+
+    cleanfunc: a function that takes a row of text and cleans it up.
+    cleanfile: the file in which to store the output
+    corpus: a list of documents
+    i2s: a map from index to label for the docs in the corpus.
+
+    """
+    clean_corpus = []
+    with open(cleanfile, "w", encoding='utf-8') as f:
+        writer = csv.writer(f)
+        # Write header
+        writer.writerow(["article_id", "sdom", "text"])
+        for i, article in enumerate(corpus):
+            # Write rows
+            sdom = i2s[i]
+            # Clean corpus along the way
+            clean_article = cleanfunc(article)
+            writer.writerow([i, sdom, clean_article])
+
+            # Create cleaned corpus
+            clean_corpus.append(clean_article)
+    return clean_corpus
