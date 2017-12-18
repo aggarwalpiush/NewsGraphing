@@ -55,7 +55,7 @@ def get_sentiment(w,sdom,contextString,labelDict):
 
     bias_label = labelDict[sdom]['bias']
     cred_label = labelDict[sdom]['cred']
-    score = sa.polarity_scores(contextString)['compound'] #- sa.polarity_scores(w)['compound'] 
+    score = sa.polarity_scores(contextString)['compound'] - sa.polarity_scores(w)['compound'] 
     
     sentiment = {'sdom':sdom,'bias':bias_label,'cred':cred_label,'score':score}
         
@@ -287,6 +287,7 @@ def expand_contractions(myString):
 
 def create_context(contextWord,myCorpus,window,i2s):
     
+    print('creating context for each top word...')
     all_context = []
     for i,raw_text in enumerate(myCorpus):
         context = {}

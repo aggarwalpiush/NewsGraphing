@@ -37,7 +37,7 @@ from nltk import tokenize, word_tokenize
 #import en_core_web_sm
 #from gensim.models.doc2vec import Doc2Vec
 #from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
-from content_model_text_functions import clean
+from content_model_text_functions import * #clean, create_context
 
 def record_results(data,FILENAME,name_arg=None):
     predictions = data[0]
@@ -50,7 +50,7 @@ def record_results(data,FILENAME,name_arg=None):
         
     with open(PATH + NAME + '_results.csv', "w",encoding='utf-8') as f:
         writer = csv.writer(f,lineterminator = '\n')
-        writer.writerow(['predictions','truth'])
+        writer.writerow(['probability_label_1','truth'])
         for i,p in enumerate(predictions):
             writer.writerow([p,truth[i]])
             
@@ -197,6 +197,59 @@ def get_problem_set(dataset,LABELNAME,labels,i2s):
     return article_ids, associated_labels, associated_domains, i2l
 
 
+def generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s):
+    
+    print('generating sentiment features...')
+    # Get context
+    word2context = {}
+    sentiment_stats_per_article = {}
+    training_feats = []
+    holdout_feats = []
+
+    # for each word in top_words, grab sentences that contain the word
+    for w_idx,w in enumerate(top_words):
+        training_feats.append([0]*len(X_train_ids))
+        holdout_feats.append([0]*len(X_holdout_ids))
+        sentiment_stats_per_article[w] = []
+        word2context[w] = create_context(w,corpus,20,i2s)
+        
+        # loop through each article
+        for line in word2context[w]:
+            sent_scores = [] # reset for each new article
+            sdom = line['sdom']
+            label = labels[sdom]['bias']
+            article_id = line['article_ID']
+        
+            if line['sentences']: # and label not in ['C']:
+                # for each context sentence in article "line"
+                for sentence in line['sentences']:
+                    sentiment = get_sentiment(w,sdom,sentence,labels)
+                    sent_scores.append(sentiment['score']) #collect sentiments for each sentence containing word in article: "line"
+        
+                # calculate sentiment stats for current article
+                article_avg = np.mean(sent_scores)
+                article_min = np.min(sent_scores)
+                article_max = np.max(sent_scores)
+    
+                # record stats per article in 'line' per word 'w'
+                sentiment_stats_per_article[w].append({'article_ID':article_id,'bias':labels[sdom]['bias'],'cred':labels[sdom]['cred'],'mean':article_avg,'min':article_min,'max':article_max})
+ 
+            # check that article is in labeled training dataset
+            if article_id in X_train_ids:
+                idx = X_train_ids.index(article_id)
+                training_feats[w_idx][idx] = article_avg
+
+            # check that article is in labeled holdout dataset
+            if article_id in X_holdout_ids:
+                idx = X_holdout_ids.index(article_id)
+                holdout_feats[w_idx][idx] = article_avg
+        
+        
+    # transform list of lists into numpy arrays so that each column is feature for word 'w'
+    training_vector = np.transpose(np.array(training_feats))
+    holdout_vector = np.transpose(np.array(holdout_feats))
+    
+    return training_vector, holdout_vector, sentiment_stats_per_article, word2context
 
 
 # main
@@ -478,66 +531,33 @@ if CLFNAME == 'logreg':
  
 
 X_holdout_ids = [ARTICLE_IDs[i] for i in holdout_indicies]
-# Get context
-word2context = {}
-sentiment_stats_per_article = {}
-sentiment_feats_training = []
-sentiment_feats_holdout = []
+# generate sentiment feature vectors
 #top_words = [w[0] for w in top_n_words_0] + [w[0] for w in top_n_words_1]
-top_words = ['obamacare','affordable care act']#,'donald trump','hillary clinton']#,'antifa','president trump','sputnik','crore','rs']
-for w_idx,w in enumerate(top_words):
-    sentiment_stats_per_article[w] = []
-    word2context[w] = create_context(w,corpus,20,i2s)
-    sentiment_feats_training.append([0]*len(X_train_ids))
-    sentiment_feats_holdout.append([0]*len(X_holdout_ids))
-    for line in word2context[w]:
-        # reset with each article
-        sent_scores = []
-        if line['sentences']:
-            sdom = line['sdom']
-            label = labels[sdom]['bias']
-            article_id = line['article_ID']
-            w_tf = line['tf']
-            # for each context sentence in article "line"
-            for sentence in line['sentences']:
-                sentiment = get_sentiment(w,sdom,sentence,labels)
-                sent_scores.append(sentiment['score']) #collect sentiments for each sentence containing word in article: "line"
-        
-        # calculate sentiment stats for current article
-        article_avg = np.mean(sent_scores)
-        article_min = np.min(sent_scores)
-        article_max = np.max(sent_scores)
-    
-        # record stats
-        sentiment_stats_per_article[w].append({'article_ID':article_id,'bias':labels[sdom]['bias'],'cred':labels[sdom]['cred'],'mean':article_avg,'min':article_min,'max':article_max})
-        
-        # create sentiment feature vector
-        # check that article is in labeled training dataset
-        if article_id in X_train_ids:
-            idx = X_train_ids.index(article_id)
-            sentiment_feats_training[w_idx][idx] = article_avg
+top_words = ['obamacare','affordable care act','donald trump','hillary clinton','climate change']#,'antifa','president trump','sputnik','crore','rs']
+training_sentiment_vector, holdout_sentiment_vector, sentiment_stats_per_article, word2context = generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s)
 
-        
-        if article_id in X_holdout_ids:
-            idx = X_holdout_ids.index(article_id)
-            sentiment_feats_holdout[w_idx][idx] = article_avg
-            
 # create TF-IDF matrix on entire training set
 X_train_tfidf = best_tfidf.fit_transform(X_TRAIN)
 #concatenate TF-IDF and sentiment features
 from scipy import sparse
-vector = np.transpose(np.array(sentiment_feats_training)) #each column is feature for word 'w'
-X_train_combined = sparse.hstack([X_train_tfidf,vector])
-# retrain best classifier from CV
-test=best_clf.fit(X_train_combined,y_TRAIN)
+X_train_combined = sparse.hstack([X_train_tfidf,training_sentiment_vector])
+# train CLFNAME classifier
+best_clf.fit(X_train_combined,y_TRAIN)
 
+# create TF-IDF matrix on holdout test set
 X_holdout_tfidf = best_tfidf.transform(X_HOLDOUT)
-vector = np.transpose(np.array(sentiment_feats_holdout)) 
-X_holdout_combined = sparse.hstack([X_holdout_tfidf,vector])
-predictions = best_clf.predict(X_holdout_combined)
+# concatenate TF-IDF and sentiment features
+X_holdout_combined = sparse.hstack([X_holdout_tfidf,holdout_sentiment_vector])
 
+# make predictions
+predictions = best_clf.predict_proba(X_holdout_combined)[:,1]
+#print(best_clf.classes_)
+# evaluate classifier performance
 acc,cms = evaluate_classifier(predictions,y_HOLDOUT)
-print(acc)
+
+#record results
+name_arg = 'plus_avg_sentiment'
+record_results([predictions,y_HOLDOUT],FILENAME,name_arg)
 
 #plt.figure()
 #plt.hist([art['mean'] for art in sentiment_stats_per_article[w] if art['bias'] in ["R"]])
