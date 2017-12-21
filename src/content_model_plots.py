@@ -18,6 +18,7 @@ LABEL_ARGS = ['bias','cred']
 PATH = '../results/'
 # files should have format: NAME_results.csv
 files = ['logreg_bias_results.csv','rf_bias_results.csv','logreg_bias_paragraph_vectors_results.csv']
+files = ['logreg_cred_results.csv']
 
 
 def makeROC(data,args):

@@ -80,7 +80,7 @@ def fit_and_predict(training_set,test_set,CLFNAME,sample_weights=None):
         
     # Instantiate classifier
     if CLFNAME == 'logreg':
-        clf = LogisticRegression(penalty='l2',C=50)
+        clf = LogisticRegression(penalty='l2',C=1)
     elif CLFNAME == 'svm':
         clf = SVC(C=1,probability=True)
     elif CLFNAME == 'rf':
