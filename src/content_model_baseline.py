@@ -154,7 +154,7 @@ def k_fold_CV(k,X,y,CLFNAME):
         # Evaluate classifier
         score,cms = evaluate_classifier(predictions,y_test_fold)
     
-        print('Fold '+str(fold)+' score: ', score)
+        print('Fold score: ', score)
     
         # Keep best classifier
         if score > best_score:
@@ -234,15 +234,15 @@ def generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpu
                 # record stats per article in 'line' per word 'w'
                 sentiment_stats_per_article[w].append({'article_ID':article_id,'bias':labels[sdom]['bias'],'cred':labels[sdom]['cred'],'mean':article_avg,'min':article_min,'max':article_max})
  
-            # check that article is in labeled training dataset
-            if article_id in X_train_ids:
-                idx = X_train_ids.index(article_id)
-                training_feats[w_idx][idx] = article_avg
+                # check that article is in labeled training dataset
+                if article_id in X_train_ids:
+                    idx = X_train_ids.index(article_id)
+                    training_feats[w_idx][idx] = article_avg
 
-            # check that article is in labeled holdout dataset
-            if article_id in X_holdout_ids:
-                idx = X_holdout_ids.index(article_id)
-                holdout_feats[w_idx][idx] = article_avg
+                # check that article is in labeled holdout dataset
+                if article_id in X_holdout_ids:
+                    idx = X_holdout_ids.index(article_id)
+                    holdout_feats[w_idx][idx] = article_avg
         
         
     # transform list of lists into numpy arrays so that each column is feature for word 'w'
@@ -251,6 +251,87 @@ def generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpu
     
     return training_vector, holdout_vector, sentiment_stats_per_article, word2context
 
+
+def generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s):
+    
+    sa = SIA()
+    
+    print('generating sentiment features...')
+    # Get context
+    word2context = {}
+    sentiment_stats_per_article = {}
+    training_feats = []
+    holdout_feats = []
+
+    # for each word in top_words, grab sentences that contain the word
+    for w_idx,w in enumerate(top_words):
+        training_feats.append([0]*len(X_train_ids))
+        holdout_feats.append([0]*len(X_holdout_ids))
+        sentiment_stats_per_article[w] = []
+        word2context[w] = create_context(w,corpus,20,i2s)
+        
+        # loop through each article
+        first_pass = True
+        first=True
+        for line in word2context[w]:
+            sdom = line['sdom']
+            label = labels[sdom]['bias']
+            article_id = line['article_ID']
+        
+            # concatenate all text by label
+            if labels[sdom]['bias'] in ["R"]:
+                temp = ' '.join(line['sentences'])
+                if first_pass:
+                   conservative_terms = [temp]
+                   first_pass = False
+                else:
+                   conservative_terms = [' '.join([conservative_terms[0],temp])]
+    
+            if labels[sdom]['bias'] in ["L"]:
+                temp = ' '.join(line['sentences'])
+                if first:
+                    liberal_terms = [temp]
+                    first = False
+                else:
+                    liberal_terms = [' '.join([liberal_terms[0],temp])]
+
+
+        # remove shared terms from sentences and then compute sentiment score per article
+        shared_terms = list(set(liberal_terms[0].split()) & set(conservative_terms[0].split()))
+        for art in word2context[w]:
+            article_id = art['article_ID']
+            temp = ' '.join(art['sentences'])
+            art_leftovers = ' '.join([word for word in temp.split() if word not in shared_terms])
+            score = sa.polarity_scores(art_leftovers)['compound']
+            sentiment_stats_per_article[w].append({'article_id':article_id,'bias':labels[sdom]['bias'],'cred':labels[sdom]['cred'],'sentiment_score':score})
+
+            # check that article is in labeled training dataset
+            if article_id in X_train_ids:
+                idx = X_train_ids.index(article_id)
+                training_feats[w_idx][idx] = score
+
+            # check that article is in labeled holdout dataset
+            if article_id in X_holdout_ids:
+                idx = X_holdout_ids.index(article_id)
+                holdout_feats[w_idx][idx] = score
+        
+#        # replace articles without context word with label average
+#        avg_lib_score =np.mean([line['sentiment_score'] for line in sentiment_stats_per_article[w] if line['bias'] in ["L","LC"]])
+#        avg_conserv_score = np.mean([line['sentiment_score'] for line in sentiment_stats_per_article[w] if line['bias'] in ["R","RC"]])
+#        
+#        zero_idx = np.where(training_feats==0)[0]
+#        lib_idx = np.where()
+#        training_feats = np.array(training_feats)
+#        training_feats[zero_idx]
+#        for idx in zero_idx:
+#            if 
+#            training_feats[idx] = avg_lib_score
+        
+    # transform list of lists into numpy arrays so that each column is feature for word 'w'
+    training_vector = np.transpose(np.array(training_feats))
+    holdout_vector = np.transpose(np.array(holdout_feats))
+    
+    return training_vector, holdout_vector, sentiment_stats_per_article, word2context
 
 # main
 logging.basicConfig(format='%(levelname)s %(asctime)-15s %(message)s', level=logging.INFO) 
@@ -414,6 +495,12 @@ print("distribution of labels : ", Counter(ARTICLE_LABELS))
 # Split labeled dataset into training set (80%) and holdout set (20%) with non-overlapping groups = ARTICLE_DOMAINS
 group_kfold = GroupKFold(n_splits=5)
 splits = list(group_kfold.split(ARTICLE_IDs,ARTICLE_LABELS,ARTICLE_DOMAINS))
+
+# splits WITH overlapping domains
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=0)
+splits = list(skf.split(ARTICLE_IDs,ARTICLE_LABELS))
+
+# select train/test indices
 train_indicies,holdout_indicies = splits[-1]
 
 # create training set
@@ -530,24 +617,24 @@ if CLFNAME == 'logreg':
     plt.show()
  
 
+# create TF-IDF matrix on entire training set
+X_train_tfidf = best_tfidf.fit_transform(X_TRAIN)
+# create TF-IDF matrix on holdout test set
+X_holdout_tfidf = best_tfidf.transform(X_HOLDOUT)
+
 X_holdout_ids = [ARTICLE_IDs[i] for i in holdout_indicies]
 # generate sentiment feature vectors
 #top_words = [w[0] for w in top_n_words_0] + [w[0] for w in top_n_words_1]
-top_words = ['obamacare','affordable care act','donald trump','hillary clinton','climate change']#,'antifa','president trump','sputnik','crore','rs']
-training_sentiment_vector, holdout_sentiment_vector, sentiment_stats_per_article, word2context = generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s)
+top_words = ['climate change','crore','obamacare','affordable care act']#,'donald trump','hillary clinton','climate change']#,'antifa','president trump','sputnik','crore','rs']
+training_sentiment_vector, holdout_sentiment_vector, sentiment_stats_per_article, word2context = generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s)
 
-# create TF-IDF matrix on entire training set
-X_train_tfidf = best_tfidf.fit_transform(X_TRAIN)
+
 #concatenate TF-IDF and sentiment features
 from scipy import sparse
 X_train_combined = sparse.hstack([X_train_tfidf,training_sentiment_vector])
+X_holdout_combined = sparse.hstack([X_holdout_tfidf,holdout_sentiment_vector])
 # train CLFNAME classifier
 best_clf.fit(X_train_combined,y_TRAIN)
-
-# create TF-IDF matrix on holdout test set
-X_holdout_tfidf = best_tfidf.transform(X_HOLDOUT)
-# concatenate TF-IDF and sentiment features
-X_holdout_combined = sparse.hstack([X_holdout_tfidf,holdout_sentiment_vector])
 
 # make predictions
 predictions = best_clf.predict_proba(X_holdout_combined)[:,1]
@@ -559,13 +646,21 @@ acc,cms = evaluate_classifier(predictions,y_HOLDOUT)
 name_arg = 'plus_avg_sentiment'
 record_results([predictions,y_HOLDOUT],FILENAME,name_arg)
 
+
+#scores = [line['sentiment_score'] for line in sentiment_stats_per_article[w]]
+#
+#print(np.mean([scores[i] for i,x in enumerate(word2context[w]) if labels[x['sdom']]['bias'] in ["L","LC"]]))
+#
+#print(np.mean([scores[i] for i,x in enumerate(word2context[w]) if labels[x['sdom']]['bias'] in ["R","RC"]]))
+#
+#print(np.mean(scores))
+#
 #plt.figure()
-#plt.hist([art['mean'] for art in sentiment_stats_per_article[w] if art['bias'] in ["R"]])
+#plt.hist([score for i,score in enumerate(scores) if labels[word2context[w][i]['sdom']]['bias'] in ['R']],color='red')
 #plt.figure()
-#plt.hist([art['mean'] for art in sentiment_stats_per_article[w] if art['bias'] in ["L"]])
+#plt.hist([score for i,score in enumerate(scores) if labels[word2context[w][i]['sdom']]['bias'] in ['L']],color='blue')
 
-
-
+       
 ## Plot source distribution histogram color-coded according to bias
 #bar_data = []
 #count=0

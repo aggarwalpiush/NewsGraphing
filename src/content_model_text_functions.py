@@ -47,6 +47,7 @@ from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
 
 import sys
 
+nlp = en_core_web_sm.load()
 
 
 def get_sentiment(w,sdom,contextString,labelDict):
@@ -74,14 +75,12 @@ def get_sentiment(w,sdom,contextString,labelDict):
         
     return sentiment #liberal_avg_score, conservative_avg_score, sentiment
 
-def find_subject(myString):
+def find_subjects(myString):
     # use spacy to find subject in sentence
-    nlp = en_core_web_sm.load()
-    
     doc = nlp(myString)
     
     #nouns = [i for i in doc.noun_chunks]
-    sub_toks = [word for word in doc if (word.dep_ == "nsubj") ]
+    sub_toks = [str(word) for word in doc if (word.dep_ == "nsubj") ]
     
     return sub_toks
 
@@ -287,7 +286,7 @@ def expand_contractions(myString):
 
 def create_context(contextWord,myCorpus,window,i2s):
     
-    print('creating context for each top word...')
+    print('creating context for top word '+str(contextWord))
     all_context = []
     for i,raw_text in enumerate(myCorpus):
         context = {}
@@ -306,14 +305,19 @@ def create_context(contextWord,myCorpus,window,i2s):
             # grab sentences in which contextWord appears
             sentences = [sentence for sentence in sentences if contextWord in sentence] #i<len(tokens)-1 and contextWord in tokens[i]+' '+tokens[i+1]]
             context['tf'] = len(sentences)
-            context['sentences'] = sentences
             
-            # filter sentences where contextWord is the subject
+#            # filter sentences where contextWord is the subject
 #            keep_sentences = []
 #            for sentence in sentences:
-#                subject = find_subject(sentence)
-#                if subject == contextWord:
+#                subjects = find_subjects(sentence)
+#                subjects = ['test']
+#                if contextWord in subjects:
 #                    keep_sentences.append(sentence)
+#                    
+#            context['sentences'] = keep_sentences
+
+            context['sentences'] = sentences
+
 #            for i,index in enumerate(indices):
 #                if (index-window)>=0:
 #                    start = index-window

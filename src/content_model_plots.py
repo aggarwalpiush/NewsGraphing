@@ -17,7 +17,7 @@ CLF_ARGS = ['logreg','rf','svm']
 LABEL_ARGS = ['bias','cred']
 PATH = '../results/'
 # files should have format: NAME_results.csv
-files = ['logreg_bias_results.csv','rf_bias_results.csv','logreg_cred_results.csv']
+files = ['logreg_bias_results.csv','rf_bias_results.csv','logreg_bias_paragraph_vectors_results.csv']
 
 
 def makeROC(data,args):
@@ -30,8 +30,10 @@ def makeROC(data,args):
             roc_data[LABELNAME] = []
         
         # legend info
-        if CLFNAME == 'logreg':
+        if CLFNAME == 'logreg' and i==0:
             roc_label = 'LogReg (TF-IDF)'
+        elif CLFNAME == 'logreg' and i==2:
+            roc_label = 'LogReg (par vectors)'
         elif CLFNAME == 'rf':
             roc_label = 'RF (TF-IDF)'
         elif CLFNAME == 'svm':

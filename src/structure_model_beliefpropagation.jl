@@ -8,21 +8,15 @@ include("graphing.jl")
 include("beliefprop.jl")
 include("Psis.jl")
 
-EDGEFILE = "data/save.feather"
-BIASFILE = "data/bias.csv"
-plotdir = "results/plots/"
+EDGEFILE = "../data/save.feather"
+BIASFILE = "../data/bias.csv"
+plotdir = "../results/plots/"
 problem_types = ["bias", "fake"]
-epsilon = 0.34
+epsilon = 0.44
 
-if EDGEFILE == "data/save.feather"
+if EDGEFILE == "../data/save.feather"
   by_domain_flag = true
-elseif EDGEFILE == "data/save2.feather"
-  by_domain_flag = false
-end
-
-if EDGEFILE == "data/save.feather"
-  by_domain_flag = true
-elseif EDGEFILE == "data/save2.feather"
+elseif EDGEFILE == "../data/save2.feather"
   by_domain_flag = false
 end
 
@@ -42,7 +36,7 @@ edgeunion = countunion(cats["a"], cats["img"])
 end
 
 
-sets = [("union", 50)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
+sets = [("union", 1)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
 
 #s2p = Dict{String, Array}()
 
