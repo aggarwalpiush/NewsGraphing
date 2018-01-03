@@ -548,7 +548,6 @@ for i,file in enumerate(files):
 
 # Perform k-fold cv
 k = 3
-data = clean_corpus
 best_clf, best_tfidf = k_fold_CV(k,X_TRAIN,y_TRAIN,CLFNAME)
 
 
