@@ -72,6 +72,8 @@ print("Generating results for arguments: ",(LABELNAME, CLFNAME))
 
 FILENAME = CLFNAME + '_' + LABELNAME
 PATH = '../results/'
+if not os.path.exists(PATH):
+	sys.exit("Results dir {} does not exist".format(PATH))
 #os.makedirs(PATH)
  
 # Read in text data
