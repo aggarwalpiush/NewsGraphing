@@ -1,5 +1,3 @@
-
-
 using GraphPlot
 using Plots
 pyplot()
@@ -8,21 +6,21 @@ include("graphing.jl")
 include("beliefprop.jl")
 include("Psis.jl")
 
-EDGEFILE = "data/save.feather"
-BIASFILE = "data/bias.csv"
-plotdir = "results/plots/"
+EDGEFILE = "../data/save.feather"
+BIASFILE = "../data/bias.csv"
+plotdir = "../results/plots/"
 problem_types = ["bias", "fake"]
-epsilon = 0.34
+epsilon = 0.44
+MAXITER = 2
 
-if EDGEFILE == "data/save.feather"
-  by_domain_flag = true
-elseif EDGEFILE == "data/save2.feather"
-  by_domain_flag = false
-end
+Plots.PyPlot.rc("lines", lw=10)
+# Plots.PyPlot.rc("font", family="monospace")
+# Plots.PyPlot.rc("font", weight="bold")
+Plots.PyPlot.rc("font", size=22)
 
-if EDGEFILE == "data/save.feather"
+if EDGEFILE == "../data/save.feather"
   by_domain_flag = true
-elseif EDGEFILE == "data/save2.feather"
+elseif EDGEFILE == "../data/save2.feather"
   by_domain_flag = false
 end
 
@@ -42,7 +40,7 @@ edgeunion = countunion(cats["a"], cats["img"])
 end
 
 
-sets = [("union", 50)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
+sets = [("union", 1)] #[("union",10)], [("mut", 1000), ("mut", 50), ("mut", 2), ("mut", 1), ("a", 1000), ("a", 500),("a", 100), ("img", 200), ("img", 50)]
 
 #s2p = Dict{String, Array}()
 
@@ -72,12 +70,15 @@ for (sn, set) in enumerate(sets)
 
     G, s2i, i2s = constructGraph(edgeset, minsamp=set[2], giant=false, by_domain=by_domain_flag)
     #G2, s2i2, i2s2 = constructGraph(edgeset, minsamp=set[2], giant=true, by_domain=by_domain_flag)
-    println(minimum([length([x for x in all_neighbors(G, v) if x != v]) for v in 1:nv(G)]))
-    lx, ly = spring_layout(G)
+    mindeg = minimum([length([x for x in all_neighbors(G, v) if x != v]) for v in 1:nv(G)])
+    println("Minimum Degree: $mindeg")
+    maxdeg = maximum(degree(G))
+    println("Maximum Degree: $maxdeg")
+    # lx, ly = spring_layout(G)
     #lx2, ly2 = spring_layout(G2)
 
     for key in problem_types
-        p = plot()
+        p = Plots.plot()
         plot!(p, [0, 1], [0, 1], line=:dash, label="")
         println(key*string(set))
         try mkdir(plotdir*string(set[1])) catch x end
@@ -103,7 +104,7 @@ for (sn, set) in enumerate(sets)
         for f in 1:k
           println("Fold " *string(f))
             ϕ = makeBeliefs(bias, G, s2i, i2s, key, folds=folds, fold=f)
-            pr, b, lodds = beliefprop(G, ϕ, Psis(epsilon), 2);
+            pr, b, lodds = beliefprop(G, ϕ, Psis(epsilon), MAXITER);
             # for v in 1:nv(G)
             #     if folds[v] == f
             #         site = i2s[v]
@@ -138,7 +139,9 @@ for (sn, set) in enumerate(sets)
         avg_auc = sum(aucs)/k
         title!("Receiver Operating Characteristic (Average AUC=$(@sprintf("%.3f", avg_auc)))")
         println("Avg AUC : "*string(avg_auc))
-        savefig(mydir*key*"_ROC_curve.png")
+        figpath = mydir*key*"_ROC_curve.png"
+        println("Saving figure to: $figpath")
+        savefig(figpath)
 
         open(mydir*"score.txt", "w") do f
             write(f, string(sum(aucs)/k))
