@@ -3,6 +3,8 @@
 using GraphPlot
 using Plots
 pyplot()
+using PyPlot
+pygui(false)
 include("loadbuild.jl")
 include("graphing.jl")
 include("beliefprop.jl")
@@ -11,6 +13,7 @@ include("Psis.jl")
 EDGEFILE = "data/save.feather"
 BIASFILE = "data/bias.csv"
 plotdir = "results/plots/"
+figext = "eps"
 problem_types = ["bias", "fake"]
 epsilon = 0.34
 
@@ -138,7 +141,7 @@ for (sn, set) in enumerate(sets)
         avg_auc = sum(aucs)/k
         title!("Receiver Operating Characteristic (Average AUC=$(@sprintf("%.3f", avg_auc)))")
         println("Avg AUC : "*string(avg_auc))
-        savefig(mydir*key*"_ROC_curve.png")
+        savefig(mydir*key*"_ROC_curve.$figext")
 
         open(mydir*"score.txt", "w") do f
             write(f, string(sum(aucs)/k))
