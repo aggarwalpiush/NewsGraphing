@@ -11,6 +11,6 @@ setup(
     name='Newsgraphing',
     version='0.1dev',
     packages=['src'],
-    license='Creative Commons Attribution-Noncommercial-Share Alike license',
-    long_description=open('README.txt').read(),
+    license='MIT',
+    long_description=open('README.md').read(),
 )
