@@ -18,7 +18,7 @@ from sklearn.ensemble import RandomForestClassifier
 #from sklearn import naive_bayes
 from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
-from dataset import get_article_text#, writetextcsv, writecleancsv
+from dataset import get_article_text, writetextcsv, writecleancsv, readbiasfile
 import csv
 from collections import Counter
 #from sklearn.pipeline import Pipeline
@@ -380,8 +380,7 @@ if not (os.path.exists(file_name)):
     
     logging.info("Downloading data from database") 
     #Get articles by domain name
-    articles,corpus,s2l,i2s= get_article_text(BIASFILE)
-    documents = articles.keys()
+    articles,corpus,labels,i2s= get_article_text(BIASFILE)
     logging.info("writing out text corpus")
     writetextcsv(file_name, corpus, i2s)
     logging.info("writing out cleaned up text corpus")
@@ -452,40 +451,10 @@ else:
             # Write rows
             writer.writerow([key,sdom_counts[key]])
     
-            
+    logging.info("Reading in scraped MBFC data labels")
+    labels, biasnames = readbiasfile(BIASFILE)
+    
 logging.info("Finished reading dataset")
-
-# Read in MBFC labels from bias.csv
-pol = ['L', 'LC', 'C', 'RC', 'R']
-rep = ['VERY LOW', 'LOW', 'MIXED', 'HIGH', 'VERY HIGH']
-flag = ['F', 'X', 'S']
-labels = {}
-
-re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
-#Regular Expression to process web domains into chunks
-wgo = re.compile("www.")
-#For replacing www.
-
-with open(BIASFILE, 'r',encoding='utf-8') as csvfile:
-    reader = csv.reader(csvfile)
-    for row in reader:
-        url = re_3986.match(row[4]).group(4)
-        if url:
-            name = wgo.sub("", url)
-            if name in articles.keys():
-                if name not in labels:
-                    labels[name] = {'bias':'na','cred':'na','flag':'na'}
-                if row[1] in pol:
-                    labels[name]['bias'] = row[1]
-                rep_label = row[2]
-                if rep_label not in rep:
-                    rep_label = ' '.join(row[2].split()).upper()
-                if rep_label in rep:
-                    labels[name]['cred'] = rep_label
-                if row[3] in flag:
-                    labels[name]['flag'] = row[3]
-  
-logging.info("Finished reading labels")
 
 # aggregate total labeled dataset per given problem arguments
 logging.info('Aggregate labeled dataset for chosen classification task') 
