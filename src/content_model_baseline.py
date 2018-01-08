@@ -5,13 +5,10 @@ import logging
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer#, TfidfTransformer, CountVectorizer
 from sklearn.model_selection import GroupKFold
-#import string
 import numpy as np
 import os
-import dataset
-#from sklearn import feature_extraction
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
+from sklearn.model_selection import StratifiedKFold
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.over_sampling import RandomOverSampler
 #from sklearn.neural_network import MLPClassifier
@@ -25,14 +22,9 @@ from dataset import get_article_text#, writetextcsv, writecleancsv
 import csv
 from collections import Counter
 #from sklearn.pipeline import Pipeline
-#from nltk.stem import PorterStemmer,SnowballStemmer
 import sys
 #from split_dataset import generate_hold_out_split
 from sklearn.metrics import confusion_matrix
-#from nltk.stem.snowball import SnowballStemmer
-#import nltk
-#nltk.download('punkt')
-from nltk import tokenize, word_tokenize
 #import spacy
 #import en_core_web_sm
 #from gensim.models.doc2vec import Doc2Vec
@@ -40,6 +32,9 @@ from nltk import tokenize, word_tokenize
 from content_model_text_functions import * #clean, create_context
 
 def record_results(data,FILENAME,name_arg=None):
+    
+    """Write predictions and truth data to csv file"""
+    
     predictions = data[0]
     truth = data[1]
     
@@ -58,6 +53,8 @@ def record_results(data,FILENAME,name_arg=None):
 
 def evaluate_classifier(predictions,truth):
     
+    """Return accuracy score and confusion matrix"""
+    
     # Check that predictions are integers
     if not all(type(item)==int for item in predictions):
         predictions = [1 if p >=.5 else 0 for p in predictions]
@@ -72,6 +69,9 @@ def evaluate_classifier(predictions,truth):
     return score, cms
 
 def fit_and_predict(training_set,test_set,CLFNAME,sample_weights=None):
+    
+    """Train CLFNAME model and make predictions"""
+    
     X_train = training_set[0]
     y_train = training_set[1]
         
@@ -98,7 +98,8 @@ def fit_and_predict(training_set,test_set,CLFNAME,sample_weights=None):
 
 def k_fold_CV(k,X,y,CLFNAME):
     
-    # Perform K-fold CV using training set
+    """Perform K-fold CV and return best classifier and TF-IDF feature set"""
+    
     best_score = 0
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=0)
     #skf = GroupKFold(n_splits=k)
@@ -169,7 +170,9 @@ def k_fold_CV(k,X,y,CLFNAME):
 
 
 def get_problem_set(dataset,LABELNAME,labels,i2s):
-    # Aggregate labels and associated article/domain information by chosen classification task
+    
+    """Aggregate labels and associated article/domain information by chosen classification task"""
+    
     test_labels = {'bias':[['L','LC'],['R','RC'],['na','C']],'cred':[['LOW','VERY LOW'],['HIGH', 'VERY HIGH'],['na','MIXED']]}
     article_ids = []
     associated_labels = []
@@ -198,6 +201,8 @@ def get_problem_set(dataset,LABELNAME,labels,i2s):
 
 
 def generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s):
+    
+    """Create sentiment features"""
     
     print('generating sentiment features...')
     # Get context
@@ -253,6 +258,8 @@ def generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpu
 
 
 def generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s):
+    
+    """Create sentiment features (alt)"""
     
     sa = SIA()
     
@@ -382,7 +389,6 @@ if not (os.path.exists(file_name)):
 
 else:
     logging.info("Reading data from cache")
-    CLEAN = []
     # Read in articles from file_name
     maxInt = sys.maxsize
     decrement = True   
@@ -409,8 +415,6 @@ else:
                 articles[row[1]] = []
             articles[row[1]].append(row[2])
             corpus.append(row[2])
-            
-            CLEAN.append(clean(row[2]))
             
             # Create the mapping from article ID to sdom name
             i2s[i] = row[1]

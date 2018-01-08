@@ -22,6 +22,8 @@ files = ['logreg_bias_results.csv','rf_bias_results.csv','logreg_cred_results.cs
 
 def makeROC(data,args):
     
+    """Plot and save ROC curves from given files"""
+    
     roc_data = {}
     for i,pair in enumerate(data):
         CLFNAME = args[i][0]
@@ -81,7 +83,8 @@ def makeROC(data,args):
 
 def distribution_by_label(predictions,truth):
     
-    # Histogram showing overlap of predicted labels
+    """ Plots histograms showing distributions of predicted labels """
+    
     plt.hist([x for i,x in enumerate(predictions) if truth[i]==0])
     plt.hist([x for i,x in enumerate(predictions) if truth[i]==1])
     plt.xlabel('Probability')
@@ -97,26 +100,27 @@ def distribution_by_label(predictions,truth):
 
 
 # main
-args = []
-data = []
-# extract parameters from file names
-for file in files:
-    if not os.path.exists(PATH+file):
-        sys.exit("One or more input files do not exist: " + str(files))
+if __name__ == '__main__':
+    args = []
+    data = []
+    # extract parameters from file names
+    for file in files:
+        if not os.path.exists(PATH+file):
+            sys.exit("One or more input files do not exist: " + str(files))
         
-    args.append(file.split('_')[:-1])
-    file_data = []
-    # read in prediction/truth data
-    with open(PATH+file,'r',encoding='utf-8') as f:
-        reader = csv.reader(f)
-        next(reader) #skip header
-        for row in reader:
-            file_data.append([float(i) for i in row])
-    data.append(file_data)
+        args.append(file.split('_')[:-1])
+        file_data = []
+        # read in prediction/truth data
+        with open(PATH+file,'r',encoding='utf-8') as f:
+            reader = csv.reader(f)
+            next(reader) #skip header
+            for row in reader:
+                file_data.append([float(i) for i in row])
+        data.append(file_data)
 
-# create and save ROC curve
-figs = makeROC(data,args)
+    # create and save ROC curve
+    figs = makeROC(data,args)
 
 
-## create and save histogram of predicted labels
-#plot = distribution_by_label()
+    ## create and save histogram of predicted labels
+    #plot = distribution_by_label()
