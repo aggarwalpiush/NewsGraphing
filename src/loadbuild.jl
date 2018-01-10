@@ -73,7 +73,6 @@ function buildWeb(df, by_domain=true)
     end
 
     p = Progress(length(cats["a"]), 0.1)
-    println(cats["a"])
     for src in keys(cats["a"])
         for dst in keys(cats["a"][src])
             if haskey(cats["a"], dst) && haskey(cats["a"][dst], src)

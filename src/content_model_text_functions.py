@@ -41,12 +41,13 @@ from nltk.stem.snowball import SnowballStemmer
 from nltk import tokenize, word_tokenize, sent_tokenize
 
 #import spacy
-#import en_core_web_sm
+import en_core_web_sm
 from gensim.models.doc2vec import Doc2Vec
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
 
 import sys
 
+nlp = en_core_web_sm.load()
 
 
 def get_sentiment(w,sdom,contextString,labelDict):
@@ -55,7 +56,7 @@ def get_sentiment(w,sdom,contextString,labelDict):
 
     bias_label = labelDict[sdom]['bias']
     cred_label = labelDict[sdom]['cred']
-    score = sa.polarity_scores(contextString)['compound']
+    score = sa.polarity_scores(contextString)['compound'] - sa.polarity_scores(w)['compound'] 
     
     sentiment = {'sdom':sdom,'bias':bias_label,'cred':cred_label,'score':score}
         
@@ -74,6 +75,14 @@ def get_sentiment(w,sdom,contextString,labelDict):
         
     return sentiment #liberal_avg_score, conservative_avg_score, sentiment
 
+def find_subjects(myString):
+    # use spacy to find subject in sentence
+    doc = nlp(myString)
+    
+    #nouns = [i for i in doc.noun_chunks]
+    sub_toks = [str(word) for word in doc if (word.dep_ == "nsubj") ]
+    
+    return sub_toks
 
 def text_to_vector(model, text):
     text_words = remove_stop_words(word_tokenize(text))
@@ -277,6 +286,7 @@ def expand_contractions(myString):
 
 def create_context(contextWord,myCorpus,window,i2s):
     
+    print('creating context for top word '+str(contextWord))
     all_context = []
     for i,raw_text in enumerate(myCorpus):
         context = {}
@@ -290,12 +300,24 @@ def create_context(contextWord,myCorpus,window,i2s):
             # split into sentences, remove punctuation, remove stop words
             sentences = sent_tokenize(text)
             sentences = [remove_punctuation(s) for s in sentences]
-            sentences = [' '.join(remove_stop_words(word_tokenize(s))) for s in sentences]
+            #sentences = [' '.join(remove_stop_words(word_tokenize(s))) for s in sentences]
             #            indices = [i for i,x in enumerate(tokens) if x == contextWord]
             # grab sentences in which contextWord appears
             sentences = [sentence for sentence in sentences if contextWord in sentence] #i<len(tokens)-1 and contextWord in tokens[i]+' '+tokens[i+1]]
             context['tf'] = len(sentences)
+            
+#            # filter sentences where contextWord is the subject
+#            keep_sentences = []
+#            for sentence in sentences:
+#                subjects = find_subjects(sentence)
+#                subjects = ['test']
+#                if contextWord in subjects:
+#                    keep_sentences.append(sentence)
+#                    
+#            context['sentences'] = keep_sentences
+
             context['sentences'] = sentences
+
 #            for i,index in enumerate(indices):
 #                if (index-window)>=0:
 #                    start = index-window

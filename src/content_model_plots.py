@@ -16,8 +16,8 @@ from collections import Counter
 CLF_ARGS = ['logreg','rf','svm']
 LABEL_ARGS = ['bias','cred']
 PATH = '../results/'
-# files should have format: NAME_results.csv
-files = ['logreg_bias_results.csv','rf_bias_results.csv','logreg_cred_results.csv']
+# files should have format: CLFNAME_LABELNAME_OPTION_results.csv
+files = ['logreg_bias_results.csv','rf_bias_results.csv','logreg_cred_results.csv','logreg_bias_paragraph_vectors_results.csv']
 
 
 def makeROC(data,args):
@@ -26,16 +26,17 @@ def makeROC(data,args):
     for i,pair in enumerate(data):
         CLFNAME = args[i][0]
         LABELNAME = args[i][1]
+        
+        if len(args[i])>2:
+            OPTION = '('+'-'.join(args[i][2:])+')'
+        else:
+            OPTION = '(tf-idf)'
+        
         if LABELNAME not in roc_data:
             roc_data[LABELNAME] = []
         
         # legend info
-        if CLFNAME == 'logreg':
-            roc_label = 'LogReg (TF-IDF)'
-        elif CLFNAME == 'rf':
-            roc_label = 'RF (TF-IDF)'
-        elif CLFNAME == 'svm':
-            roc_label = 'SVM (TF-IDF)'
+        roc_label = CLFNAME + ' ' + OPTION
         
         # compute AUC
         predictions = [p[0] for p in pair]
@@ -103,7 +104,7 @@ for file in files:
     if not os.path.exists(PATH+file):
         sys.exit("One or more input files do not exist: " + str(files))
         
-    args.append(file.split('_')[:2])
+    args.append(file.split('_')[:-1])
     file_data = []
     # read in prediction/truth data
     with open(PATH+file,'r',encoding='utf-8') as f:
