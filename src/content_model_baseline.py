@@ -28,12 +28,20 @@ from sklearn.metrics import confusion_matrix
 #import spacy
 #import en_core_web_sm
 #from gensim.models.doc2vec import Doc2Vec
-#from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
 from content_model_text_functions import * #clean, create_context
 
 def record_results(data,FILENAME,name_arg=None):
+    """Write predictions and truth data to csv file
+        
+    Arguments
+    - data: a list of predictions and truth data
+    - FILENAME: a string indicating the classification problem
+    - name_arg: a string indicating a change to the default classification problem (default is logreg using TF-IDF features for bias)
+
+    Returns: None
     
-    """Write predictions and truth data to csv file"""
+    """
     
     predictions = data[0]
     truth = data[1]
@@ -52,8 +60,17 @@ def record_results(data,FILENAME,name_arg=None):
     return 
 
 def evaluate_classifier(predictions,truth):
+    """Return accuracy score and confusion matrix
+        
+    Arguments
+    - predictions: a list of predictions (probability label is '1')
+    - truth: a list of integer truth data ('0' or '1')
+
+    Returns:
+    - score: a float representing the accuracy score
+    - cms: a numpy ndarray representing the binary confusion matrix
     
-    """Return accuracy score and confusion matrix"""
+    """
     
     # Check that predictions are integers
     if not all(type(item)==int for item in predictions):
@@ -62,15 +79,25 @@ def evaluate_classifier(predictions,truth):
     # Compute Accuracy
     score = accuracy_score(truth, predictions)
     
-    # Print confusion matrix
+    # Create confusion matrix
     cms = confusion_matrix(truth, predictions)
-    print(cms)
     
     return score, cms
 
 def fit_and_predict(training_set,test_set,CLFNAME,sample_weights=None):
+    """Train CLFNAME model and make predictions
     
-    """Train CLFNAME model and make predictions"""
+    Arguments
+    - training_set: a list of features and labels for training
+    - test_set: a list of features and labels for testing
+    - CLFNAME: a string specifiying the classification model
+    - sample_weights: a list of floats specifying the sample weights to use with the classifier
+
+    Returns:
+    - clf: a trained classifier specified by CLFNAME
+    - predictions: a numpy array of prediction probabilities for belonging to class label '1'
+    
+    """
     
     X_train = training_set[0]
     y_train = training_set[1]
@@ -97,8 +124,19 @@ def fit_and_predict(training_set,test_set,CLFNAME,sample_weights=None):
     return clf, predictions
 
 def k_fold_CV(k,X,y,CLFNAME):
+    """Perform K-fold CV and return best classifier and TF-IDF feature set
+        
+    Arguments
+    - k: an integer specifying the number of folds
+    - X: a list of articles
+    - y: a list of labels
+    - CLFNAME: a string specifiying the classification model
+
+    Returns:
+    - best_clf: a trained classifier specified by CLFNAME
+    - best_tfidf: a trained TfidfVectorizer object
     
-    """Perform K-fold CV and return best classifier and TF-IDF feature set"""
+    """
     
     best_score = 0
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=0)
@@ -170,8 +208,21 @@ def k_fold_CV(k,X,y,CLFNAME):
 
 
 def get_problem_set(dataset,LABELNAME,labels,i2s):
+    """Aggregate labels and associated article/domain information by chosen classification task
     
-    """Aggregate labels and associated article/domain information by chosen classification task"""
+    Arguments
+    - dataset: a list of article text (the corpus)
+    - LABELNAME: a string given by user input identifying the classification task
+    - labels: a dict mapping domain names to bias and credibility label information
+    - i2s: a dict mapping integer vertex labels to string representations (domain names)
+
+    Returns:
+    - article_ids: a list of article ID's included in the classification task's problem set
+    - associated_labels: a list of labels corresponding to the article ID's in the classification task's problem set
+    - associated_domains: a list of domains corresponding to the article ID's in the classification task's problem set
+    - i2l: a dict mapping integer vertex labels to integer representations (binary labels)
+    
+    """
     
     test_labels = {'bias':[['L','LC'],['R','RC'],['na','C']],'cred':[['LOW','VERY LOW'],['HIGH', 'VERY HIGH'],['na','MIXED']]}
     article_ids = []
@@ -201,65 +252,23 @@ def get_problem_set(dataset,LABELNAME,labels,i2s):
 
 
 def generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s):
+    """Create sentiment features
     
-    """Create sentiment features"""
-    
-    print('generating sentiment features...')
-    # Get context
-    word2context = {}
-    sentiment_stats_per_article = {}
-    training_feats = []
-    holdout_feats = []
+    Arguments
+    - top_words: list of most informative or polarizing bias-words in corpus
+    - labels: a dict mapping domain names to bias and credibility label information
+    - X_train_ids: the set of row ids that are in the training set
+    - X_holdout_ids: the set of row ids that are in the holdout/testing set
+    - corpus: the set of news articles (documents)
+    - i2s: a dict mapping integer vertex labels to string representations (domain names)
 
-    # for each word in top_words, grab sentences that contain the word
-    for w_idx,w in enumerate(top_words):
-        training_feats.append([0]*len(X_train_ids))
-        holdout_feats.append([0]*len(X_holdout_ids))
-        sentiment_stats_per_article[w] = []
-        word2context[w] = create_context(w,corpus,20,i2s)
-        
-        # loop through each article
-        for line in word2context[w]:
-            sent_scores = [] # reset for each new article
-            sdom = line['sdom']
-            label = labels[sdom]['bias']
-            article_id = line['article_ID']
-        
-            if line['sentences']: # and label not in ['C']:
-                # for each context sentence in article "line"
-                for sentence in line['sentences']:
-                    sentiment = get_sentiment(w,sdom,sentence,labels)
-                    sent_scores.append(sentiment['score']) #collect sentiments for each sentence containing word in article: "line"
-        
-                # calculate sentiment stats for current article
-                article_avg = np.mean(sent_scores)
-                article_min = np.min(sent_scores)
-                article_max = np.max(sent_scores)
+    Returns:
+    - training_vector: a numpy ndarray containing sentiment scores for each word in top_words and each article in the training set
+    - holdout_vector:a numpy ndarray containing sentiment scores for each word in top_words and each article in the holdout set
+    - sentiment_stats_per_article: a dict mapping the context word to bias/credibility label information, article ID, and sentiment score
+    - word2context: a dict mapping the context word to sentences in the corpus which include it 
     
-                # record stats per article in 'line' per word 'w'
-                sentiment_stats_per_article[w].append({'article_ID':article_id,'bias':labels[sdom]['bias'],'cred':labels[sdom]['cred'],'mean':article_avg,'min':article_min,'max':article_max})
- 
-                # check that article is in labeled training dataset
-                if article_id in X_train_ids:
-                    idx = X_train_ids.index(article_id)
-                    training_feats[w_idx][idx] = article_avg
-
-                # check that article is in labeled holdout dataset
-                if article_id in X_holdout_ids:
-                    idx = X_holdout_ids.index(article_id)
-                    holdout_feats[w_idx][idx] = article_avg
-        
-        
-    # transform list of lists into numpy arrays so that each column is feature for word 'w'
-    training_vector = np.transpose(np.array(training_feats))
-    holdout_vector = np.transpose(np.array(holdout_feats))
-    
-    return training_vector, holdout_vector, sentiment_stats_per_article, word2context
-
-
-def generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s):
-    
-    """Create sentiment features (alt)"""
+    """
     
     sa = SIA()
     
@@ -275,7 +284,7 @@ def generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,c
         training_feats.append([0]*len(X_train_ids))
         holdout_feats.append([0]*len(X_holdout_ids))
         sentiment_stats_per_article[w] = []
-        word2context[w] = create_context(w,corpus,20,i2s)
+        word2context[w] = create_context(w,corpus,i2s)
         
         # loop through each article
         first_pass = True
@@ -597,8 +606,8 @@ X_holdout_tfidf = best_tfidf.transform(X_HOLDOUT)
 X_holdout_ids = [ARTICLE_IDs[i] for i in holdout_indicies]
 # generate sentiment feature vectors
 #top_words = [w[0] for w in top_n_words_0] + [w[0] for w in top_n_words_1]
-top_words = ['climate change','crore','obamacare','affordable care act']#,'donald trump','hillary clinton','climate change']#,'antifa','president trump','sputnik','crore','rs']
-training_sentiment_vector, holdout_sentiment_vector, sentiment_stats_per_article, word2context = generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s)
+top_words = ['climate change','obamacare']#,'donald trump','hillary clinton','climate change']#,'antifa','president trump','sputnik','crore','rs']
+training_sentiment_vector, holdout_sentiment_vector, sentiment_stats_per_article, word2context = generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s)
 
 
 #concatenate TF-IDF and sentiment features
