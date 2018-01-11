@@ -1,12 +1,15 @@
 using Feather
 using DataFrames
 using ProgressMeter
+# using CSV
 
 function loadSave(filename)
     return Feather.read(filename) #save (domain) or save2 (article)
 end
 
 function loadBias(filename)
+    # CSV.read is necessary to update to new dataframes
+    # bias = CSV.read(filename, header=false)
     bias = readtable(filename, header=false)
     code = r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?"
 

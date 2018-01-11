@@ -1,14 +1,18 @@
 using GraphPlot
 using Plots
 pyplot()
+using PyPlot
+pygui(false)
 include("loadbuild.jl")
 include("graphing.jl")
 include("beliefprop.jl")
 include("Psis.jl")
 
-EDGEFILE = "../data/save.feather"
-BIASFILE = "../data/bias.csv"
-plotdir = "../results/plots/"
+EDGEFILE = "data/save.feather"
+BIASFILE = "data/bias.csv"
+plotdir = "results/plots/"
+figext = "eps"
+
 problem_types = ["bias", "fake"]
 epsilon = 0.44
 MAXITER = 2
@@ -18,9 +22,9 @@ Plots.PyPlot.rc("lines", lw=10)
 # Plots.PyPlot.rc("font", weight="bold")
 Plots.PyPlot.rc("font", size=22)
 
-if EDGEFILE == "../data/save.feather"
+if EDGEFILE == "data/save.feather"
   by_domain_flag = true
-elseif EDGEFILE == "../data/save2.feather"
+elseif EDGEFILE == "data/save2.feather"
   by_domain_flag = false
 end
 
@@ -139,7 +143,7 @@ for (sn, set) in enumerate(sets)
         avg_auc = sum(aucs)/k
         title!("Receiver Operating Characteristic (Average AUC=$(@sprintf("%.3f", avg_auc)))")
         println("Avg AUC : "*string(avg_auc))
-        figpath = mydir*key*"_ROC_curve.png"
+        figpath = mydir*key*"_ROC_curve.$figext"
         println("Saving figure to: $figpath")
         savefig(figpath)
 

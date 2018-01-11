@@ -1,17 +1,15 @@
 
 from __future__ import unicode_literals, print_function
+import argparse
 
 import logging
 import re
 from sklearn.feature_extraction.text import TfidfVectorizer#, TfidfTransformer, CountVectorizer
 from sklearn.model_selection import GroupKFold
-#import string
 import numpy as np
 import os
-import dataset
-#from sklearn import feature_extraction
 from sklearn.metrics import accuracy_score
-from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
+from sklearn.model_selection import StratifiedKFold
 from imblearn.under_sampling import RandomUnderSampler
 from imblearn.over_sampling import RandomOverSampler
 #from sklearn.neural_network import MLPClassifier
@@ -21,25 +19,31 @@ from sklearn.ensemble import RandomForestClassifier
 #from sklearn import naive_bayes
 from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
-from dataset import get_article_text#, writetextcsv, writecleancsv
+from dataset import get_article_text, writetextcsv, writecleancsv, readbiasfile
 import csv
 from collections import Counter
 #from sklearn.pipeline import Pipeline
-#from nltk.stem import PorterStemmer,SnowballStemmer
 import sys
 #from split_dataset import generate_hold_out_split
 from sklearn.metrics import confusion_matrix
-#from nltk.stem.snowball import SnowballStemmer
-#import nltk
-#nltk.download('punkt')
-from nltk import tokenize, word_tokenize
 #import spacy
 #import en_core_web_sm
 #from gensim.models.doc2vec import Doc2Vec
-#from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
+from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
 from content_model_text_functions import * #clean, create_context
 
 def record_results(data,FILENAME,name_arg=None):
+    """Write predictions and truth data to csv file
+        
+    Arguments
+    - data: a list of predictions and truth data
+    - FILENAME: a string indicating the classification problem
+    - name_arg: a string indicating a change to the default classification problem (default is logreg using TF-IDF features for bias)
+
+    Returns: None
+    
+    """
+    
     predictions = data[0]
     truth = data[1]
     
@@ -57,6 +61,17 @@ def record_results(data,FILENAME,name_arg=None):
     return 
 
 def evaluate_classifier(predictions,truth):
+    """Return accuracy score and confusion matrix
+        
+    Arguments
+    - predictions: a list of predictions (probability label is '1')
+    - truth: a list of integer truth data ('0' or '1')
+
+    Returns:
+    - score: a float representing the accuracy score
+    - cms: a numpy ndarray representing the binary confusion matrix
+    
+    """
     
     # Check that predictions are integers
     if not all(type(item)==int for item in predictions):
@@ -65,13 +80,26 @@ def evaluate_classifier(predictions,truth):
     # Compute Accuracy
     score = accuracy_score(truth, predictions)
     
-    # Print confusion matrix
+    # Create confusion matrix
     cms = confusion_matrix(truth, predictions)
-    print(cms)
     
     return score, cms
 
 def fit_and_predict(training_set,test_set,CLFNAME,sample_weights=None):
+    """Train CLFNAME model and make predictions
+    
+    Arguments
+    - training_set: a list of features and labels for training
+    - test_set: a list of features and labels for testing
+    - CLFNAME: a string specifiying the classification model
+    - sample_weights: a list of floats specifying the sample weights to use with the classifier
+
+    Returns:
+    - clf: a trained classifier specified by CLFNAME
+    - predictions: a numpy array of prediction probabilities for belonging to class label '1'
+    
+    """
+    
     X_train = training_set[0]
     y_train = training_set[1]
         
@@ -97,8 +125,20 @@ def fit_and_predict(training_set,test_set,CLFNAME,sample_weights=None):
     return clf, predictions
 
 def k_fold_CV(k,X,y,CLFNAME):
+    """Perform K-fold CV and return best classifier and TF-IDF feature set
+        
+    Arguments
+    - k: an integer specifying the number of folds
+    - X: a list of articles
+    - y: a list of labels
+    - CLFNAME: a string specifiying the classification model
+
+    Returns:
+    - best_clf: a trained classifier specified by CLFNAME
+    - best_tfidf: a trained TfidfVectorizer object
     
-    # Perform K-fold CV using training set
+    """
+    
     best_score = 0
     skf = StratifiedKFold(n_splits=k, shuffle=True, random_state=0)
     #skf = GroupKFold(n_splits=k)
@@ -169,7 +209,22 @@ def k_fold_CV(k,X,y,CLFNAME):
 
 
 def get_problem_set(dataset,LABELNAME,labels,i2s):
-    # Aggregate labels and associated article/domain information by chosen classification task
+    """Aggregate labels and associated article/domain information by chosen classification task
+    
+    Arguments
+    - dataset: a list of article text (the corpus)
+    - LABELNAME: a string given by user input identifying the classification task
+    - labels: a dict mapping domain names to bias and credibility label information
+    - i2s: a dict mapping integer vertex labels to string representations (domain names)
+
+    Returns:
+    - article_ids: a list of article ID's included in the classification task's problem set
+    - associated_labels: a list of labels corresponding to the article ID's in the classification task's problem set
+    - associated_domains: a list of domains corresponding to the article ID's in the classification task's problem set
+    - i2l: a dict mapping integer vertex labels to integer representations (binary labels)
+    
+    """
+    
     test_labels = {'bias':[['L','LC'],['R','RC'],['na','C']],'cred':[['LOW','VERY LOW'],['HIGH', 'VERY HIGH'],['na','MIXED']]}
     article_ids = []
     associated_labels = []
@@ -198,61 +253,23 @@ def get_problem_set(dataset,LABELNAME,labels,i2s):
 
 
 def generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s):
+    """Create sentiment features
     
-    print('generating sentiment features...')
-    # Get context
-    word2context = {}
-    sentiment_stats_per_article = {}
-    training_feats = []
-    holdout_feats = []
+    Arguments
+    - top_words: list of most informative or polarizing bias-words in corpus
+    - labels: a dict mapping domain names to bias and credibility label information
+    - X_train_ids: the set of row ids that are in the training set
+    - X_holdout_ids: the set of row ids that are in the holdout/testing set
+    - corpus: the set of news articles (documents)
+    - i2s: a dict mapping integer vertex labels to string representations (domain names)
 
-    # for each word in top_words, grab sentences that contain the word
-    for w_idx,w in enumerate(top_words):
-        training_feats.append([0]*len(X_train_ids))
-        holdout_feats.append([0]*len(X_holdout_ids))
-        sentiment_stats_per_article[w] = []
-        word2context[w] = create_context(w,corpus,20,i2s)
-        
-        # loop through each article
-        for line in word2context[w]:
-            sent_scores = [] # reset for each new article
-            sdom = line['sdom']
-            label = labels[sdom]['bias']
-            article_id = line['article_ID']
-        
-            if line['sentences']: # and label not in ['C']:
-                # for each context sentence in article "line"
-                for sentence in line['sentences']:
-                    sentiment = get_sentiment(w,sdom,sentence,labels)
-                    sent_scores.append(sentiment['score']) #collect sentiments for each sentence containing word in article: "line"
-        
-                # calculate sentiment stats for current article
-                article_avg = np.mean(sent_scores)
-                article_min = np.min(sent_scores)
-                article_max = np.max(sent_scores)
+    Returns:
+    - training_vector: a numpy ndarray containing sentiment scores for each word in top_words and each article in the training set
+    - holdout_vector:a numpy ndarray containing sentiment scores for each word in top_words and each article in the holdout set
+    - sentiment_stats_per_article: a dict mapping the context word to bias/credibility label information, article ID, and sentiment score
+    - word2context: a dict mapping the context word to sentences in the corpus which include it 
     
-                # record stats per article in 'line' per word 'w'
-                sentiment_stats_per_article[w].append({'article_ID':article_id,'bias':labels[sdom]['bias'],'cred':labels[sdom]['cred'],'mean':article_avg,'min':article_min,'max':article_max})
- 
-                # check that article is in labeled training dataset
-                if article_id in X_train_ids:
-                    idx = X_train_ids.index(article_id)
-                    training_feats[w_idx][idx] = article_avg
-
-                # check that article is in labeled holdout dataset
-                if article_id in X_holdout_ids:
-                    idx = X_holdout_ids.index(article_id)
-                    holdout_feats[w_idx][idx] = article_avg
-        
-        
-    # transform list of lists into numpy arrays so that each column is feature for word 'w'
-    training_vector = np.transpose(np.array(training_feats))
-    holdout_vector = np.transpose(np.array(holdout_feats))
-    
-    return training_vector, holdout_vector, sentiment_stats_per_article, word2context
-
-
-def generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s):
+    """
     
     sa = SIA()
     
@@ -268,7 +285,7 @@ def generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,c
         training_feats.append([0]*len(X_train_ids))
         holdout_feats.append([0]*len(X_holdout_ids))
         sentiment_stats_per_article[w] = []
-        word2context[w] = create_context(w,corpus,20,i2s)
+        word2context[w] = create_context(w,corpus,i2s)
         
         # loop through each article
         first_pass = True
@@ -336,45 +353,54 @@ def generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,c
 # main
 logging.basicConfig(format='%(levelname)s %(asctime)-15s %(message)s', level=logging.INFO) 
 
-BIASFILE = '../data/bias.csv'
 CLF_ARGS = ['logreg','rf','svm']
 LABEL_ARGS = ['bias','cred']
-if len(sys.argv) < 2: # only script called
-    # default classifier and task
-    CLFNAME = 'logreg'
-    LABELNAME = 'bias'
-elif len(sys.argv) < 3: # only classifier given
-    CLFNAME = sys.argv[1]
-    # default task
-    LABELNAME = 'bias'
-else: # both classifier and task specified
-    CLFNAME = sys.argv[1]
-    LABELNAME = sys.argv[2]
 
-# must be a valid classifier
-if CLFNAME not in CLF_ARGS:
-    sys.exit("Invalid classifier argument. Choose from " + str(CLF_ARGS) + " as first argument.")
-# must be a valid task
-if LABELNAME not in LABEL_ARGS:
-    sys.exit("Invalid task argument. Choose from " + str(LABEL_ARGS) + " as second argument.")
-      
-print("Generating results for arguments: ", (LABELNAME, CLFNAME)) 
+def parse_arguments():
+    desc = 'Analyze data with baseline content model.'
+    parser = argparse.ArgumentParser(description=desc)
+    # parser.add_argument('limit', metavar='N', type=int,
+    #                     help='Limit on the number of articles -1 for all of them')
+    parser.add_argument('-b', '--biasfile', default='data/bias.csv', type=str,
+                        help='path to read for bias labels')
+    parser.add_argument('-d', '--datadir', default='results', type=str,
+                        help='path containing input data')
+    parser.add_argument('-r', '--resultsdir', default='results', type=str,
+                        help='path to store the resulting data')
+    parser.add_argument('-l', '--labeltype', default='bias', choices=LABEL_ARGS,
+                        help='which set of labels to use')
+    parser.add_argument('-c', '--classifier', default='logreg', choices=CLF_ARGS,
+                        help='which classifier to use')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='Disable verbose output')
+    return parser.parse_args()
+
+args = parse_arguments()
+BIASFILE = args.biasfile
+CLFNAME = args.classifier
+LABELNAME = args.labeltype
+DATADIR = args.datadir
+
+print("Generating results for arguments: ",(LABELNAME, CLFNAME))
 
 FILENAME = CLFNAME + '_' + LABELNAME
-PATH = '../results/'
+PATH = args.resultsdir
+if not os.path.exists(PATH):
+	sys.exit("Results dir {} does not exist".format(PATH))
 #os.makedirs(PATH)
  
 # Read in text data
 pull_mongo_flag = True
-file_name = "../data/gdelt_text.csv"
-cleanfile = "../data/gdelt_text_clean.csv"
-clean_corpus = None
+
+file_name = os.path.join(DATADIR, "gdelt_text.csv")
+cleanfile = os.path.join(DATADIR, "gdelt_text_clean.csv")
+clean_corpus = []
+
 if not (os.path.exists(file_name)):
     
     logging.info("Downloading data from database") 
     #Get articles by domain name
-    articles,corpus,s2l,i2s= get_article_text(BIASFILE)
-    documents = articles.keys()
+    articles,corpus,labels,i2s= get_article_text(BIASFILE)
     logging.info("writing out text corpus")
     writetextcsv(file_name, corpus, i2s)
     logging.info("writing out cleaned up text corpus")
@@ -382,7 +408,6 @@ if not (os.path.exists(file_name)):
 
 else:
     logging.info("Reading data from cache")
-    CLEAN = []
     # Read in articles from file_name
     maxInt = sys.maxsize
     decrement = True   
@@ -410,8 +435,6 @@ else:
             articles[row[1]].append(row[2])
             corpus.append(row[2])
             
-            CLEAN.append(clean(row[2]))
-            
             # Create the mapping from article ID to sdom name
             i2s[i] = row[1]
             
@@ -436,9 +459,7 @@ else:
             articles_by_sdom.append(row[1])
     
     sdom_counts = Counter(articles_by_sdom)
-    datapath = '../data/sdom_by_article.csv'
-    logging.info("Writing count data to path {}".format(datapath))  
-    with open(datapath, "w",encoding='utf-8') as f:
+    with open(os.path.join(DATADIR, 'sdom_by_article.csv'), "w",encoding='utf-8') as f:
         writer = csv.writer(f)
         # Write header
         writer.writerow(["sdom","number of articles"])
@@ -448,40 +469,10 @@ else:
             # Write rows
             writer.writerow([key,sdom_counts[key]])
     
-            
+    logging.info("Reading in scraped MBFC data labels")
+    labels, biasnames = readbiasfile(BIASFILE)
+    
 logging.info("Finished reading dataset")
-
-# Read in MBFC labels from bias.csv
-pol = ['L', 'LC', 'C', 'RC', 'R']
-rep = ['VERY LOW', 'LOW', 'MIXED', 'HIGH', 'VERY HIGH']
-flag = ['F', 'X', 'S']
-labels = {}
-
-re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
-#Regular Expression to process web domains into chunks
-wgo = re.compile("www.")
-#For replacing www.
-
-with open(BIASFILE, 'r',encoding='utf-8') as csvfile:
-    reader = csv.reader(csvfile)
-    for row in reader:
-        url = re_3986.match(row[4]).group(4)
-        if url:
-            name = wgo.sub("", url)
-            if name in articles.keys():
-                if name not in labels:
-                    labels[name] = {'bias':'na','cred':'na','flag':'na'}
-                if row[1] in pol:
-                    labels[name]['bias'] = row[1]
-                rep_label = row[2]
-                if rep_label not in rep:
-                    rep_label = ' '.join(row[2].split()).upper()
-                if rep_label in rep:
-                    labels[name]['cred'] = rep_label
-                if row[3] in flag:
-                    labels[name]['flag'] = row[3]
-  
-logging.info("Finished reading labels")
 
 # aggregate total labeled dataset per given problem arguments
 logging.info('Aggregate labeled dataset for chosen classification task') 
@@ -526,7 +517,7 @@ elif LABELNAME == 'cred':
     
 split_ids = [train_indicies] + [holdout_indicies]
 for i,file in enumerate(files):
-    with open('../data/' + file, "w",encoding='utf-8',newline='') as f:
+    with open(os.path.join(DATADIR, file), "w",encoding='utf-8',newline='') as f:
         writer = csv.writer(f)
         # Write header
         if LABELNAME == 'bias':
@@ -576,7 +567,8 @@ print (confusion_matrix(y_resampled, predictions))
 
 predictions = best_clf.predict_proba(X_holdout_tfidf)[:,1]
 # Write predictions to csv
-record_results([predictions,y_HOLDOUT],FILENAME)
+
+record_results([predictions,y_HOLDOUT],os.path.join(PATH, FILENAME))
 
 
 # Get most informative features
@@ -599,7 +591,7 @@ if CLFNAME == 'logreg':
         files = ['not_credible_words.csv','credible_words.csv']
     
     for i,category in enumerate(top_n_words):
-        with open(PATH+files[i],'w',encoding='utf-8') as f:
+        with open(os.path.join(PATH,files[i]),'w',encoding='utf-8') as f:
             writer = csv.writer(f,lineterminator = '\n')
             writer.writerow(['word','coefficient value'])
             for words in category:
@@ -624,8 +616,8 @@ X_holdout_tfidf = best_tfidf.transform(X_HOLDOUT)
 X_holdout_ids = [ARTICLE_IDs[i] for i in holdout_indicies]
 # generate sentiment feature vectors
 #top_words = [w[0] for w in top_n_words_0] + [w[0] for w in top_n_words_1]
-top_words = ['climate change','crore','obamacare','affordable care act']#,'donald trump','hillary clinton','climate change']#,'antifa','president trump','sputnik','crore','rs']
-training_sentiment_vector, holdout_sentiment_vector, sentiment_stats_per_article, word2context = generate_sentiment_features_ALT(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s)
+top_words = ['climate change','obamacare']#,'donald trump','hillary clinton','climate change']#,'antifa','president trump','sputnik','crore','rs']
+training_sentiment_vector, holdout_sentiment_vector, sentiment_stats_per_article, word2context = generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpus,i2s)
 
 
 #concatenate TF-IDF and sentiment features

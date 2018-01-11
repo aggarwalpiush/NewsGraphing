@@ -9,73 +9,32 @@ Created on Fri Dec  8 13:12:52 2017
 
 from __future__ import unicode_literals, print_function
 
-from sklearn.feature_extraction.text import TfidfVectorizer, TfidfTransformer, CountVectorizer
 import string
-import numpy as np
-import os
 from sklearn import feature_extraction
-from sklearn.metrics import accuracy_score
-from sklearn.model_selection import cross_val_score, KFold, StratifiedKFold
-from imblearn.under_sampling import RandomUnderSampler
-from imblearn.over_sampling import RandomOverSampler
-#from sklearn.neural_network import MLPClassifier
-#from sklearn.neighbors import KNeighborsClassifier
-from sklearn.svm import SVC
-from sklearn.ensemble import RandomForestClassifier
-from sklearn import naive_bayes
-from sklearn.linear_model import LogisticRegression
-
-from dataset import get_article_text
-import csv
-from collections import Counter
-from sklearn.pipeline import Pipeline
 #from nltk.stem import PorterStemmer,SnowballStemmer
-import sys
-#from split_dataset import generate_hold_out_split
-from sklearn.metrics import confusion_matrix
-#from imblearn.under_sampling import RandomUnderSampler
-#from imblearn.over_sampling import RandomOverSampler
-from nltk.stem.snowball import SnowballStemmer
 #import nltk
 #nltk.download('punkt')
 from nltk import tokenize, word_tokenize, sent_tokenize
-
 #import spacy
 import en_core_web_sm
-from gensim.models.doc2vec import Doc2Vec
+#from gensim.models.doc2vec import Doc2Vec
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
 
-import sys
 
 nlp = en_core_web_sm.load()
 
 
-def get_sentiment(w,sdom,contextString,labelDict):
-    
-    sa = SIA()
-
-    bias_label = labelDict[sdom]['bias']
-    cred_label = labelDict[sdom]['cred']
-    score = sa.polarity_scores(contextString)['compound'] - sa.polarity_scores(w)['compound'] 
-    
-    sentiment = {'sdom':sdom,'bias':bias_label,'cred':cred_label,'score':score}
-        
-#    score = [sentiment[i]["score"] for i in range(len(sentiment)) if sentiment[i]["bias"] in ["RC","R"] and sentiment[i]["cred"] in ["HIGH","VERY HIGH"]]
-#    if score:
-#        conservative_avg_score = np.mean(score)
-#    else:
-#        conservative_avg_score = 0
-#        
-#    score = [sentiment[i]["score"] for i in range(len(sentiment)) if sentiment[i]["bias"] in ["LC","L"] and sentiment[i]["cred"] in ["HIGH","VERY HIGH"]]
-#    if score:
-#        liberal_avg_score = np.mean(score)
-#    else:
-#        liberal_avg_score = 0
-        
-        
-    return sentiment #liberal_avg_score, conservative_avg_score, sentiment
-
 def find_subjects(myString):
+    """ Find and return word(s) in input string that are the subject(s)
+    
+    Arguments
+    - myString: a string of text
+
+    Returns:
+    - sub_toks: a list of subject words
+        
+    """
+    
     # use spacy to find subject in sentence
     doc = nlp(myString)
     
@@ -85,21 +44,65 @@ def find_subjects(myString):
     return sub_toks
 
 def text_to_vector(model, text):
+    """Create paragraph vector from input string
+    
+    Arguments
+    - text: a string of text
+    - model: a trained Doc2Vec model
+
+    Returns:
+    - text_vector: a 1x300 dimensional vector representing the input text
+        
+    """
+    
     text_words = remove_stop_words(word_tokenize(text))
     model.random.seed(0)
     text_vector = model.infer_vector(text_words)
+    
     return text_vector
 
 
 def remove_punctuation(myString):
+    """Remove punction from input string
+    
+    Arguments
+    - myString: a string of text
+
+    Returns:
+    - newString: a string of text without punctuation
+        
+    """
+    
     translator = str.maketrans('', '', string.punctuation)
-    # Remove punctuation marks
-    return myString.translate(translator)
+    newString = myString.translate(translator)
+    
+    return newString 
 
 def remove_stop_words(tokens):
-    return [w for w in tokens if w not in feature_extraction.text.ENGLISH_STOP_WORDS]
+    """Remove stop words from tokenized list of words
+    
+    Arguments
+    - tokens: a list of words
+
+    Returns:
+    - newTokens: a list of words that are not stop words
+        
+    """
+    newTokens = [w for w in tokens if w not in feature_extraction.text.ENGLISH_STOP_WORDS]
+    
+    return newTokens
 
 def stem_words(myString):
+    """Stem words from input string
+    
+    Arguments
+    - myString: a string of text
+
+    Returns:
+    - stemmed: a list of stemmed words
+        
+    """
+    
 #    stemmer = SnowballStemmer('english') #PorterStemmer()
 #    return [stemmer.stem(token) for token in tokens]
     stemmed = []
@@ -109,44 +112,60 @@ def stem_words(myString):
         if token.lemma_:
             token = token.lemma_
         stemmed.append(str(token))
+        
     return stemmed
 
-#def stem_words(myList):
-#    new_list = []
-#    stemmer = SnowballStemmer("english")
-#    for w in myList:
-#        new_list.append(stemmer.stem(w))
-#    
-#    return new_list
 
 def return_top_k_keys(myDict,k):
-    # Returns keys with largest k values (i.e. counts)
-    return sorted(myDict, key=myDict.get, reverse=True)[:k]
+    """Returns 'k' keys with largest values (i.e. counts)
+    
+    Arguments
+    - myDict: a dict of keys and values
+    - k: an integer specifying the number of entries to be returned
 
-#def clean(myString):
-#    myTokens_no_numbers = []
-#    myTokens = remove_punctuation(myString.lower()).split()
-#    myTokens_no_stops = remove_stop_words(myTokens)
-#    myTokens_stemmed = stem_words(' '.join(myTokens_no_stops))
-#    for token in myTokens_stemmed: #myTokens_no_stops:
-#        if not any(char.isdigit() for char in token):
-#            myTokens_no_numbers.append(token)
-#    
-#    myString_cleaned = " ".join(myTokens_no_numbers)
-#    
-#    return myString_cleaned
+    Returns:
+    - top_k_keys: a list of keys from myDict
+        
+    """
+    
+    top_k_keys = sorted(myDict, key=myDict.get, reverse=True)[:k]
+    
+    return top_k_keys
 
-def remove_foreign_chars(myString):
-    return myString.replace('“',' ').replace('”',' ').replace('’',"'").replace('©','copyright')
+
+def remove_invalid_chars(myString):
+    """Remove invalid characters from input string
+    
+    Arguments
+    - myString: a string of text
+
+    Returns:
+    - newString: a string with invalid characters replaced
+        
+    """
+    
+    newString = myString.replace('“',' ').replace('”',' ').replace('’',"'").replace('©','copyright')
+    
+    return newString
 
 def clean(myString):
-    no_foreign_chars = remove_foreign_chars(myString)
-    no_contractions = expand_contractions(no_foreign_chars.lower())
+    """Clean input string through pipeline of tasks
+    
+    Arguments
+    - myString: a string of text
+
+    Returns:
+    - myString_cleaned: a string of text cleaned according to the specified pipeline
+        
+    """
+    
+    no_invalid_chars = remove_invalid_chars(myString)
+    no_contractions = expand_contractions(no_invalid_chars.lower())
     no_punctuation = remove_punctuation(no_contractions)
     tokens = no_punctuation.split()
     no_stops = remove_stop_words(tokens)
 #    stemmed_tokens = stem_words(' '.join(no_stops))
-    no_numbers = []
+#    no_numbers = []
 #    for token in stemmed_tokens:
 #        if not any(char.isdigit() for char in token):
 #            no_numbers.append(token)
@@ -158,6 +177,18 @@ def clean(myString):
     return myString_cleaned
        
 def expand_contractions(myString):
+    """Expand contractions in input string
+    
+    english_contractions source: https://stackoverflow.com/questions/19790188/expanding-english-language-contractions-in-python
+    
+    Arguments
+    - myString: a string of text
+
+    Returns:
+    - newString: a string of text with contractions expanded
+        
+    """
+    
     english_contractions = { 
 "ain't": "am not; are not; is not; has not; have not",
 "aren't": "are not; am not",
@@ -281,17 +312,31 @@ def expand_contractions(myString):
     for i,w in enumerate(myString.split()):
         if w in english_contractions.keys():
             new_s[i] = english_contractions[w]
-    return " ".join(new_s)
+            
+    newString = " ".join(new_s)
+    
+    return newString
 
 
-def create_context(contextWord,myCorpus,window,i2s):
+def create_context(contextWord,myCorpus,i2s):
+    """Returns sentences in corpus for which given context word appears
+    
+    Arguments
+    - contextWord: a string representing the word/phrase for which you want context
+    - myCorpus: a list of article text in the corpus
+    - i2s: a dict mapping integer vertex labels to string representations (domain names)
+
+    Returns:
+    - all_context: a list containing of dict of relevant sentences their metadata (source domain, article ID, term freq)
+        
+    """
     
     print('creating context for top word '+str(contextWord))
     all_context = []
     for i,raw_text in enumerate(myCorpus):
         context = {}
         # Adjust raw text
-        text = expand_contractions(remove_foreign_chars(raw_text).lower())
+        text = expand_contractions(remove_invalid_chars(raw_text).lower())
 
         if contextWord in text:
             # grab source its from
@@ -318,18 +363,6 @@ def create_context(contextWord,myCorpus,window,i2s):
 
             context['sentences'] = sentences
 
-#            for i,index in enumerate(indices):
-#                if (index-window)>=0:
-#                    start = index-window
-#                else:
-#                    start = 0
-#                if (index+window)>len(tokens):
-#                    stop = len(tokens)
-#                    context['sentences'].append(tokens[start:stop])
-#                else:
-#                    stop = index+window
-#                    context['sentences'].append(tokens[start:stop+1])
-        
             all_context.append(context)
     
     return all_context

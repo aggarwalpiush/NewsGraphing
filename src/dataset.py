@@ -10,11 +10,11 @@ import csv
 
 defaultmgoclient = MongoClient('mongodb://gdelt:meidnocEf1@10.51.4.177:20884/')
 re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
-
+wgo = re.compile("www.")
 
 def readbiasfile(filename):
     """This opens up the MBFC labels which were scraped off their website"""
-    bias = []
+
     biasnames = []
     # Political Bias
     pol = ['L', 'LC', 'C', 'RC', 'R']
@@ -22,28 +22,31 @@ def readbiasfile(filename):
     rep = ['VERY LOW', 'LOW', 'MIXED', 'HIGH', 'VERY HIGH']
     # Fake categories: Fake, Conspiracy, Satire
     flag = ['F', 'X', 'S']
-    s2l = {}
+
+    labels = {}
+    
     with open(filename, 'r', encoding='utf-8') as csvfile:
         reader = csv.reader(csvfile)
         for row in reader:
-            print(row)
-            name = re_3986.match(row[4]).group(4)
-            p = -1
-            r = -1
-            f = -1
-            if row[1] in pol:
-                p = pol.index(row[1])
-                s2l[name] = row[1]
-            if row[2] in rep:
-                r = rep.index(row[2])
-            if row[3] in flag:
-                f = flag.index(row[3])
-                s2l[name] = row[3]
-            bias.append(row + [name, p, r, f, 1 if p == -1 else 0])
+            url = re_3986.match(row[4]).group(4)
+            if url:
+                name = wgo.sub("", url)
+                if name not in labels:
+                    labels[name] = {'bias':'na','cred':'na','flag':'na'}
+                if row[1] in pol:
+                    labels[name]['bias'] = row[1]
+                rep_label = row[2]
+                if rep_label not in rep:
+                    rep_label = ' '.join(row[2].split()).upper()
+                if rep_label in rep:
+                    labels[name]['cred'] = rep_label
+                if row[3] in flag:
+                    labels[name]['flag'] = row[3]
 
-            if (p != -1 or r != -1) and name not in biasnames:
-                biasnames.append(name)
-    return bias, biasnames, s2l
+                if ( labels[name]['bias'] != 'na' or  labels[name]['cred'] != 'na') and name not in biasnames:
+                    biasnames.append(name)
+
+    return labels, biasnames
 
 
 def sourcedomain(obj):
@@ -61,7 +64,7 @@ def get_article_text(biasfile, mgoclient, sample=1000):
     # For replacing www.
     # whitelist = ["NOUN", "PROPN", "ADJ", "ADV"]
     # Types of words we'll look at
-    bias, biasnames, s2l = readbiasfile(biasfile)
+    labels, biasnames = readbiasfile(biasfile)
     biasnameset = set(biasnames)
     stuff = db.find({}, {'text': 1, 'sourceurl': 1}).sort("_id", -1).limit(sample)
     arts = {}
@@ -95,7 +98,7 @@ def get_article_text(biasfile, mgoclient, sample=1000):
     print('Number of domains with text and at least one label', len(arts.keys()))
     print('Total number of articles: ', sum(counts.values()))
 
-    return (arts, corpus, s2l, i2s)
+    return (arts, corpus, labels, i2s)
 
 
 def writetextcsv(file_name, corpus, i2s):

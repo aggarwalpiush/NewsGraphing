@@ -23,7 +23,7 @@ else:
 # need to be more flexible/automated
 # python src/dataset.py
 print("Running content_model_baseline.py")
-sub.check_call(["python", "src/content_model_baseline.py"])
+sub.check_call(["python", "src/content_model_baseline.py", '-d', 'data', '-r', 'results', '-l', 'bias', '-c', 'logreg', '-b', 'data/bias.csv'])
 
 # BP Model
 sub.check_call(["julia", "src/structure_model_beliefpropagation.jl"])
