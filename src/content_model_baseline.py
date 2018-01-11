@@ -1,5 +1,6 @@
 
 from __future__ import unicode_literals, print_function
+import argparse
 
 import logging
 import re
@@ -352,39 +353,49 @@ def generate_sentiment_features(top_words,labels,X_train_ids,X_holdout_ids,corpu
 # main
 logging.basicConfig(format='%(levelname)s %(asctime)-15s %(message)s', level=logging.INFO) 
 
-BIASFILE = '../data/bias.csv'
 CLF_ARGS = ['logreg','rf','svm']
 LABEL_ARGS = ['bias','cred']
-if len(sys.argv) < 2: # only script called
-    # default classifier and task
-    CLFNAME = 'logreg'
-    LABELNAME = 'bias'
-elif len(sys.argv) < 3: # only classifier given
-    CLFNAME = sys.argv[1]
-    # default task
-    LABELNAME = 'bias'
-else: # both classifier and task specified
-    CLFNAME = sys.argv[1]
-    LABELNAME = sys.argv[2]
 
-# must be a valid classifier
-if CLFNAME not in CLF_ARGS:
-    sys.exit("Invalid classifier argument. Choose from " + str(CLF_ARGS) + " as first argument.")
-# must be a valid task
-if LABELNAME not in LABEL_ARGS:
-    sys.exit("Invalid task argument. Choose from " + str(LABEL_ARGS) + " as second argument.")
-      
-print("Generating results for arguments: ", (LABELNAME, CLFNAME)) 
+def parse_arguments():
+    desc = 'Analyze data with baseline content model.'
+    parser = argparse.ArgumentParser(description=desc)
+    # parser.add_argument('limit', metavar='N', type=int,
+    #                     help='Limit on the number of articles -1 for all of them')
+    parser.add_argument('-b', '--biasfile', default='data/bias.csv', type=str,
+                        help='path to read for bias labels')
+    parser.add_argument('-d', '--datadir', default='results', type=str,
+                        help='path containing input data')
+    parser.add_argument('-r', '--resultsdir', default='results', type=str,
+                        help='path to store the resulting data')
+    parser.add_argument('-l', '--labeltype', default='bias', choices=LABEL_ARGS,
+                        help='which set of labels to use')
+    parser.add_argument('-c', '--classifier', default='logreg', choices=CLF_ARGS,
+                        help='which classifier to use')
+    parser.add_argument('-q', '--quiet', action='store_true',
+                        help='Disable verbose output')
+    return parser.parse_args()
+
+args = parse_arguments()
+BIASFILE = args.biasfile
+CLFNAME = args.classifier
+LABELNAME = args.labeltype
+DATADIR = args.datadir
+
+print("Generating results for arguments: ",(LABELNAME, CLFNAME))
 
 FILENAME = CLFNAME + '_' + LABELNAME
-PATH = '../results/'
+PATH = args.resultsdir
+if not os.path.exists(PATH):
+	sys.exit("Results dir {} does not exist".format(PATH))
 #os.makedirs(PATH)
  
 # Read in text data
 pull_mongo_flag = True
-file_name = "../data/gdelt_text.csv"
-cleanfile = "../data/gdelt_text_clean.csv"
-clean_corpus = None
+
+file_name = os.path.join(DATADIR, "gdelt_text.csv")
+cleanfile = os.path.join(DATADIR, "gdelt_text_clean.csv")
+clean_corpus = []
+
 if not (os.path.exists(file_name)):
     
     logging.info("Downloading data from database") 
@@ -448,9 +459,7 @@ else:
             articles_by_sdom.append(row[1])
     
     sdom_counts = Counter(articles_by_sdom)
-    datapath = '../data/sdom_by_article.csv'
-    logging.info("Writing count data to path {}".format(datapath))  
-    with open(datapath, "w",encoding='utf-8') as f:
+    with open(os.path.join(DATADIR, 'sdom_by_article.csv'), "w",encoding='utf-8') as f:
         writer = csv.writer(f)
         # Write header
         writer.writerow(["sdom","number of articles"])
@@ -508,7 +517,7 @@ elif LABELNAME == 'cred':
     
 split_ids = [train_indicies] + [holdout_indicies]
 for i,file in enumerate(files):
-    with open('../data/' + file, "w",encoding='utf-8',newline='') as f:
+    with open(os.path.join(DATADIR, file), "w",encoding='utf-8',newline='') as f:
         writer = csv.writer(f)
         # Write header
         if LABELNAME == 'bias':
@@ -558,7 +567,8 @@ print (confusion_matrix(y_resampled, predictions))
 
 predictions = best_clf.predict_proba(X_holdout_tfidf)[:,1]
 # Write predictions to csv
-record_results([predictions,y_HOLDOUT],FILENAME)
+
+record_results([predictions,y_HOLDOUT],os.path.join(PATH, FILENAME))
 
 
 # Get most informative features
@@ -581,7 +591,7 @@ if CLFNAME == 'logreg':
         files = ['not_credible_words.csv','credible_words.csv']
     
     for i,category in enumerate(top_n_words):
-        with open(PATH+files[i],'w',encoding='utf-8') as f:
+        with open(os.path.join(PATH,files[i]),'w',encoding='utf-8') as f:
             writer = csv.writer(f,lineterminator = '\n')
             writer.writerow(['word','coefficient value'])
             for words in category:
