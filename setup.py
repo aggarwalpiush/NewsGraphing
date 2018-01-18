@@ -52,7 +52,7 @@ setup(name=package,
           'tldextract',
           'tqdm',
           'vaderSentiment'],
-      package_dir={'bsdetector': 'bsdetector'},
+      package_dir={'newsgraphing': 'src'},
       description="Analyzes news articles for bias and credibility",
       url='url',
       cmdclass={
