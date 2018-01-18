@@ -33,7 +33,7 @@ class PostInstallCommand(install):
 print(find_packages('src'))
 setup(name=package,
       version=version,
-      packages=['src'],
+      packages=['newsgraphing'],
       install_requires=[
           'numpy',
           'networkx',
@@ -52,7 +52,7 @@ setup(name=package,
           'tldextract',
           'tqdm',
           'vaderSentiment'],
-      package_dir={'newsgraphing': 'src'},
+      package_dir={'': 'src'},
       description="Analyzes news articles for bias and credibility",
       url='url',
       cmdclass={
