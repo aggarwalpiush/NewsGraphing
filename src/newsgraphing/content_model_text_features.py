@@ -36,10 +36,11 @@ from sklearn.feature_extraction import text
 from sklearn.linear_model import LogisticRegression
 
 import string
-from dataset import get_article_text
 
 from spacy.en import English
 from collections import Counter
+
+from .dataset import get_article_text
 
 
 def remove_punctuation(myString):

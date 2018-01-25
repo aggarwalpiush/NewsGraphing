@@ -55,7 +55,7 @@ def sourcedomain(obj):
     return wgo.sub("", re_3986.match(obj['sourceurl']).group(4))
 
 
-def get_article_text(biasfile, mgoclient, sample=1000):
+def get_article_text(biasfile, mgoclient=defaultmgoclient, sample=1000):
     """download articles from the mongo client and for return the text for all the domains
     that are labeled according to biasfile."""
     # Connect to the GDELT Mongo database

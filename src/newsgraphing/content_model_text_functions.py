@@ -15,13 +15,13 @@ from sklearn import feature_extraction
 #import nltk
 #nltk.download('punkt')
 from nltk import tokenize, word_tokenize, sent_tokenize
-#import spacy
-import en_core_web_sm
+import spacy
+
 #from gensim.models.doc2vec import Doc2Vec
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
 
 
-nlp = en_core_web_sm.load()
+nlp = spacy.load('en_core_web_sm')
 
 
 def find_subjects(myString):

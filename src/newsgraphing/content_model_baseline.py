@@ -19,7 +19,6 @@ from sklearn.ensemble import RandomForestClassifier
 #from sklearn import naive_bayes
 from sklearn.linear_model import LogisticRegression
 import matplotlib.pyplot as plt
-from dataset import get_article_text, writetextcsv, writecleancsv, readbiasfile
 import csv
 from collections import Counter
 #from sklearn.pipeline import Pipeline
@@ -30,7 +29,9 @@ from sklearn.metrics import confusion_matrix
 #import en_core_web_sm
 #from gensim.models.doc2vec import Doc2Vec
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
-from content_model_text_functions import * #clean, create_context
+
+from .dataset import get_article_text, writetextcsv, writecleancsv, readbiasfile
+from .content_model_text_functions import * #clean, create_context
 
 def record_results(data,FILENAME,name_arg=None):
     """Write predictions and truth data to csv file
