@@ -7,10 +7,104 @@ Created on Thu Sep 21 14:15:52 2017
 from pymongo import MongoClient
 import re
 import csv
+from download import downloadfiles
+import os
+import sys
+from content_model_text_functions import clean
+import logging
+from collections import Counter
+
+logging.basicConfig(format='%(levelname)s %(asctime)-15s %(message)s', level=logging.INFO) 
 
 defaultmgoclient = MongoClient('mongodb://gdelt:meidnocEf1@10.51.4.177:20884/')
 re_3986 = re.compile(r"^(([^:/?#]+):)?(//([^/?#]*))?([^?#]*)(\?([^#]*))?(#(.*))?")
 wgo = re.compile("www.")
+
+def processdatafiles(FILEPATH,CLEANFILEPATH,BIASFILE,DATADIR):
+    """Download and read in all the text csvfiles for the content model"""
+     
+    # check if csv files already exist (gdelt_text.csv, bias.csv)
+    if not (os.path.exists(FILEPATH)) or not (os.path.exists(BIASFILE)):
+        logging.info("Downloading data files from dropbox")
+        downloadfiles(DATADIR)
+        
+    # read in gdelt article text
+    logging.info("Reading data from cache")
+    corpus, articles, i2s, sdom_counts = readtextcsv(FILEPATH,DATADIR)
+    
+    # check if gdelt_text_clean.csv already exists
+    if not (os.path.exists(CLEANFILEPATH)):
+        logging.info("Writing out cleaned text corpus")
+        clean_corpus = writecleancsv(clean, CLEANFILEPATH, corpus, i2s)
+    else:
+        logging.info("Reading (clean) data from cache")
+        clean_corpus,_,_,_ = readtextcsv(CLEANFILEPATH,DATADIR)
+    
+    # read in scraped MBFC labels
+    logging.info("Reading in scraped MBFC data labels")
+    labels,biasnames = readbiasfile(BIASFILE)
+    
+    print('Number of domains with at least one label', len(set(biasnames)))
+    
+    return corpus, clean_corpus, articles, i2s, labels, sdom_counts
+
+def readtextcsv(filename,DATADIR):
+    """Read in the text csv from filename.
+
+    filename: the file from which to read
+    DATADIR: the dir to which to write out
+    
+    corpus: a list of documents
+    articles: a dict mapping source domain to its text
+    i2s: a dict mapping article index to source domain for the articles in the corpus
+    sdom_counts: a dict mapping source domain to its number of articles in the corpus
+
+    """
+    
+    # read in/format data files
+    maxInt = sys.maxsize
+    decrement = True   
+    articles = {}
+    i2s = {}
+    corpus = []
+    sdoms = []
+    with open(filename, 'r',encoding='utf-8') as csvfile:
+        reader = csv.reader(csvfile)
+        next(reader)
+        for i,row in enumerate(reader):
+            while decrement: 
+                # decrease the maxInt value by factor 10 
+                # as long as the OverflowError occurs.
+                decrement = False
+                try:
+                    csv.field_size_limit(maxInt)
+                except OverflowError:
+                    maxInt = int(maxInt/10)
+                    decrement = True
+                    logging.info('decrementing csv field size limit.')
+            # each row = article ID, sdom, article text
+            if row[1] not in articles:
+                articles[row[1]] = []
+            articles[row[1]].append(row[2])
+            corpus.append(row[2])
+            
+            sdoms.append(row[1])
+            
+            # Create the mapping from article ID to sdom name
+            i2s[i] = row[1]
+
+    sdom_counts = Counter(sdoms)    
+    if not (os.path.exists(os.path.join(DATADIR, 'sdom_by_article.csv'))):
+        with open(os.path.join(DATADIR, 'sdom_by_article.csv'), "w",encoding='utf-8') as f:
+            writer = csv.writer(f)
+            # Write header
+            writer.writerow(["sdom","number of articles"])
+            for key in sdom_counts.keys():
+                # Write rows
+                writer.writerow([key,sdom_counts[key]])
+            
+    return corpus, articles, i2s, sdom_counts
+        
 
 def readbiasfile(filename):
     """This opens up the MBFC labels which were scraped off their website"""

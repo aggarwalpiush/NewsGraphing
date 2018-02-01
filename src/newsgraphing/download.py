@@ -6,6 +6,7 @@ Created on Tue Jan 23 13:35:52 2018
 """
 
 import requests
+
 DATADIR = '../../data'
 urls = ['https://www.dropbox.com/s/jzi8lm9hkntwkga/save.feather?dl=1','https://www.dropbox.com/s/ct3j5mjz7sdwo9x/gdelt_text.csv?dl=1','https://www.dropbox.com/s/4ywhh7giljarzlz/bias.csv?dl=1']
 local_filenames = ['save.feather','gdelt_text.csv','bias.csv']

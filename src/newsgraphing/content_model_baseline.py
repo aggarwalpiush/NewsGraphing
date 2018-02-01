@@ -30,8 +30,8 @@ from sklearn.metrics import confusion_matrix
 #from gensim.models.doc2vec import Doc2Vec
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer as SIA
 
-from .dataset import get_article_text, writetextcsv, writecleancsv, readbiasfile
-from .content_model_text_functions import * #clean, create_context
+from dataset import processdatafiles
+from content_model_text_functions import * #clean, create_context
 
 def record_results(data,FILENAME,name_arg=None):
     """Write predictions and truth data to csv file
@@ -53,7 +53,7 @@ def record_results(data,FILENAME,name_arg=None):
     else:
         NAME = FILENAME +'_'+str(name_arg)
         
-    with open(PATH + NAME + '_results.csv', "w",encoding='utf-8') as f:
+    with open(NAME + '_results.csv', "w",encoding='utf-8') as f:
         writer = csv.writer(f,lineterminator = '\n')
         writer.writerow(['probability_label_1','truth'])
         for i,p in enumerate(predictions):
@@ -364,7 +364,7 @@ def parse_arguments():
     #                     help='Limit on the number of articles -1 for all of them')
     parser.add_argument('-b', '--biasfile', default='data/bias.csv', type=str,
                         help='path to read for bias labels')
-    parser.add_argument('-d', '--datadir', default='results', type=str,
+    parser.add_argument('-d', '--datadir', default='data', type=str,
                         help='path containing input data')
     parser.add_argument('-r', '--resultsdir', default='results', type=str,
                         help='path to store the resulting data')
@@ -391,88 +391,9 @@ if not os.path.exists(PATH):
 #os.makedirs(PATH)
  
 # Read in text data
-pull_mongo_flag = True
-
 file_name = os.path.join(DATADIR, "gdelt_text.csv")
-cleanfile = os.path.join(DATADIR, "gdelt_text_clean.csv")
-clean_corpus = []
-
-if not (os.path.exists(file_name)):
-    
-    logging.info("Downloading data from database") 
-    #Get articles by domain name
-    articles,corpus,labels,i2s= get_article_text(BIASFILE)
-    logging.info("writing out text corpus")
-    writetextcsv(file_name, corpus, i2s)
-    logging.info("writing out cleaned up text corpus")
-    clean_corpus = writecleancsv(clean, cleanfile, corpus, i2s)
-
-else:
-    logging.info("Reading data from cache")
-    # Read in articles from file_name
-    maxInt = sys.maxsize
-    decrement = True   
-    articles = {}
-    i2s = {}
-    corpus = []
-    clean_corpus = []
-    with open(file_name, 'r',encoding='utf-8') as csvfile:
-        reader = csv.reader(csvfile)
-        next(reader)
-        for i,row in enumerate(reader):
-            while decrement: 
-                # decrease the maxInt value by factor 10 
-                # as long as the OverflowError occurs.
-                decrement = False
-                try:
-                    csv.field_size_limit(maxInt)
-                except OverflowError:
-                    maxInt = int(maxInt/10)
-                    decrement = True
-                    logging.info('decrementing csv field size limit.')
-            # each row = article ID, sdom, article text
-            if row[1] not in articles:
-                articles[row[1]] = []
-            articles[row[1]].append(row[2])
-            corpus.append(row[2])
-            
-            # Create the mapping from article ID to sdom name
-            i2s[i] = row[1]
-            
-    logging.info("Reading data from clean file cache")    
-    articles_by_sdom = []
-    with open(cleanfile, 'r',encoding='utf-8') as csvfile:
-        reader = csv.reader(csvfile)
-        next(reader)
-        for row in reader:
-            while decrement: 
-                # decrease the maxInt value by factor 10 
-                # as long as the OverflowError occurs.
-                decrement = False
-                try:
-                    csv.field_size_limit(maxInt)
-                except OverflowError:
-                    maxInt = int(maxInt/10)
-                    decrement = True
-            # Read in the cleaned corpus
-            clean_corpus.append(row[2])
-            
-            articles_by_sdom.append(row[1])
-    
-    sdom_counts = Counter(articles_by_sdom)
-    with open(os.path.join(DATADIR, 'sdom_by_article.csv'), "w",encoding='utf-8') as f:
-        writer = csv.writer(f)
-        # Write header
-        writer.writerow(["sdom","number of articles"])
-        # Concatenate each domain's text into corpus
-        #corpus = []
-        for key in sdom_counts.keys():
-            # Write rows
-            writer.writerow([key,sdom_counts[key]])
-    
-    logging.info("Reading in scraped MBFC data labels")
-    labels, biasnames = readbiasfile(BIASFILE)
-    
+clean_file_name = os.path.join(DATADIR, "gdelt_text_clean.csv")
+corpus, clean_corpus, articles, i2s, labels, sdom_counts = processdatafiles(file_name,clean_file_name,BIASFILE,DATADIR)    
 logging.info("Finished reading dataset")
 
 # aggregate total labeled dataset per given problem arguments
@@ -605,7 +526,7 @@ if CLFNAME == 'logreg':
     plt.ylabel('Probability')
     plt.title('Histogram of Log Reg Coefficients')
     plt.grid(True)
-    plt.savefig(PATH+FILENAME+'_coeff_hist.png',bbox_inches='tight')
+    plt.savefig(os.path.join(PATH, FILENAME)+'_coeff_hist.png',bbox_inches='tight')
     plt.show()
  
 
@@ -636,7 +557,8 @@ acc,cms = evaluate_classifier(predictions,y_HOLDOUT)
 
 #record results
 name_arg = 'plus_avg_sentiment'
-record_results([predictions,y_HOLDOUT],FILENAME,name_arg)
+filename = os.path.join(PATH, FILENAME)
+record_results([predictions,y_HOLDOUT],filename,name_arg)
 
 
 #scores = [line['sentiment_score'] for line in sentiment_stats_per_article[w]]
